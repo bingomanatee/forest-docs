@@ -1,0 +1,164 @@
+import { LoginForm3 } from '../../examples/login/version_3'
+
+# All that data has to go somewhere, doesn't it?
+
+Forest is synchronous by design; however you can accomplish a lot of asynchonicity even so, by either calling
+Leaves from async functions or using promise/then/catch within an action. (the catch is, actions are contained
+within transactions, and async code by definition escapes the start/stop of the transaction).
+
+By breaking the async respond/fail handlers into separate actions, we can break an async *process* into a series
+of synchronous stages. And at this point, we break the login form into its own function.
+
+Part of that form is a "faux HTTP Transport", an axios simulator, that returns data with a delay...
+
+```javascript
+import { Leaf } from '@wonderlandlabs/forest'
+import { makeField } from '../version_2/makeField'
+
+const axios = {
+  post (url, data) {
+    return new Promise((done, fail) => {
+      setTimeout(() => {
+        const response = {data: {user:{...data, id: 1234}}};
+        console.log('sending response', response);
+        done(response);
+      }, 2000);
+    });
+  }
+}
+
+export function makeForm() {
+  return new Leaf({
+      status: 'entering',
+      response: null
+    },
+    {
+      branches: {
+        username: makeField('User Name', 'text', (value) => {
+          if (/[\s]+/.test(value)) {
+            return 'username cannot have spaces'
+          }
+        }),
+        password: makeField('Password', 'password', (value) => {
+          if (/[\s]+/.test(value)) {
+            return 'password cannot have spaces'
+          }
+          if (value.length < 8) {
+            return 'password must be 8 or more characters'
+          }
+        })
+      },
+      actions: {
+        update(leaf, status, response) {
+          leaf.do.setStatus(status);
+          leaf.do.setResponse(response);
+        },
+        onFail(leaf, response) {
+          leaf.do.update('failure', response.data ? response.data : 'error')
+        },
+        onResponse(leaf, postResponse) {
+          if (postResponse.data && postResponse.data.user) {
+            leaf.do.update('success', postResponse.data.user)
+          } else if (postResponse.data && postResponse.data.error) {
+            leaf.do.update('failure', postResponse.data.error)
+          } else {
+            leaf.do.update('failure', 'error')
+          }
+        },
+        forOutput(leaf) {
+          return {
+            username: leaf.value.username.value,
+            password: leaf.value.password.value
+          }
+        },
+        submit(leaf) {
+          if (!leaf.do.isReady()) {
+            return
+          }
+          if (leaf.value.status !== 'entering') {
+            return
+          }
+          leaf.do.setStatus('sending')
+          axios.post('/api/login', leaf.do.forOutput())
+            .then(leaf.do.onResponse)
+            .catch(leaf.do.onFail)
+        },
+        isReady(leaf) {
+          if (!(leaf.value.password.value && leaf.value.username.value)) {
+            return false
+          }
+          if (!leaf.branch('username').do.isValid() || !leaf.branch('password').do.isValid()) {
+            return false
+          }
+          return true
+        },
+        reset(leaf) {
+          leaf.next({
+            status: 'entering',
+            response: null
+          });
+          leaf.branch('username').do.reset();
+          leaf.branch('password').do.reset();
+        }
+      }
+    }
+  )
+}
+
+
+```
+
+And a slightly updated UX to include feedback for success. Also passing up status to the input classes to lock them
+during and after transport.
+
+```jsx
+import { useEffect, useState } from 'react'
+import { LeafInput } from './version_3/LeafInput'
+import { makeForm } from './version_3/makeForm'
+
+export const LoginForm3 = () => {
+  const [state, setState] = useState(false)
+  const [login, setLogin] = useState(null)
+  useEffect(() => {
+
+    const login = makeForm();
+
+    const sub = login.subscribe({
+    next (value){
+      const state = { ...value, isReady: login.do.isReady() }
+      setState(state)
+    },
+  })
+
+    setLogin(login)
+
+    return () => {
+      sub.unsubscribe()
+    }
+  }, [])
+
+  if (!(state && login)) {
+    return ''
+  }
+
+  return <>
+    <div className='login-box'>
+      <div className='flex-item'>
+        <LeafInput status={state.status} branch={login.branch('username')} />
+        <LeafInput status={state.status} branch={login.branch('password')} />
+      </div>
+      <div className='flex-item'>
+        <button type='submit' onClick={login.do.submit} disabled={!login.do.isReady()}>Log In</button>
+        <button type='reset' onClick={login.do.reset}>Reset</button>
+      </div>
+    </div>
+    {state.status === 'success' && <div className="message center">Saved data with id = {state.response.id}</div>}
+    {state.status === 'error' && <div className="message error center">Failed to save user; reset and try again</div>}
+    <pre>
+       {JSON.stringify(state, true, 3)}
+     </pre>
+  </>
+}
+```
+
+<LoginForm3 />

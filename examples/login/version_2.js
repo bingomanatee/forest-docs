@@ -1,48 +1,18 @@
 import { Leaf } from '@wonderlandlabs/forest'
 import { useEffect, useState } from 'react'
 import { LeafInput } from './version_2/LeafInput'
-
-function makeField(title, type, validator) {
-  return new Leaf({
-      title,
-      value: '',
-      type,
-      touched: false
-    },
-    {
-
-      actions: {
-        update(leaf, value) {
-          leaf.do.setValue(value)
-          leaf.do.setTouched(true);
-        },
-        isValid(leaf) {
-          return !leaf.do.errors()
-        },
-        isEmpty(leaf) {
-          return !leaf.value.value
-        },
-        errors(leaf) {
-          if (leaf.do.isEmpty()) {
-            return 'must have a value'
-          }
-          return validator(leaf.value.value)
-        }
-      }
-    })
-}
+import { makeField } from './version_2/makeField'
 
 export const LoginForm2 = () => {
   const [state, setState] = useState(false)
   const [login, setLogin] = useState(null)
   useEffect(() => {
-    console.log('making new login');
+
     const login = new Leaf({
         status: 'entering',
         response: null
       },
       {
-        debug: true,
         branches: {
           username: makeField('User Name', 'text', (value) => {
             if (/[\s]+/.test(value)) {
@@ -70,9 +40,9 @@ export const LoginForm2 = () => {
             leaf.next({
               status: 'entering',
               response: null,
-              password: {value: '', touched: false},
-              username: {value: '', touched: false}
-            })
+            });
+            leaf.branch('username').do.reset();
+            leaf.branch('password').do.reset();
           }
         }
       }
@@ -81,18 +51,13 @@ export const LoginForm2 = () => {
     const sub = login.subscribe({
     next (value){
       const state = { ...value, isReady: login.do.isReady() }
-      console.log('--- update state:', state);
       setState(state)
     },
-    error(err) {
-      console.log('error: ', err);
-    }
   })
 
     setLogin(login)
 
     return () => {
-      console.log('unsubscribed');
       sub.unsubscribe()
     }
   }, [])

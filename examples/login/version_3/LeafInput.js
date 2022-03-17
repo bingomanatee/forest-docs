@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
  * @param branch {Leaf}
  * @returns {JSX.Element|string}
  */
-export const LeafInput = ({branch}) => {
+export const LeafInput = ({status, branch}) => {
 
   function makeState(value = null) {
     if (!value) value = branch.value;
@@ -27,7 +27,8 @@ export const LeafInput = ({branch}) => {
   return  <>
     <h2>{state.title}</h2>
     <input type={state.type} value={state.value}
+      disabled={status !== 'entering'}
       onChange={(event) => branch.do.update(event.target.value)} />
-    {state.touched && branch.do.errors() ? <div className="error">{branch.do.errors()}</div> : '' }
+    {state.touched && branch.do.errors() ? <div className="message error">{branch.do.errors()}</div> : '' }
   </>
 }

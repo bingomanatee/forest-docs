@@ -48,6 +48,12 @@
     border-color: black;
 }
 
+.login-box .flex-item input[disabled],
+.login-box .flex-item input:disabled {
+    border-color: lightgray !important;
+    color: gray !important;
+}
+
 .login-box .flex-item button {
     font-size: 18px;
     padding: 0.5em 1em;
@@ -63,4 +69,15 @@
 .login-box .flex-item button[disabled] {
     color: lightgray;
     border-color: lightgray;
+}
+
+.login-box .message {
+    padding: 3px 0;
+    font-style: italic;
+}
+.login-box .error {
+    color: red;
+}
+.login-box .center {
+    text-align: center;
 }

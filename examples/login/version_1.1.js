@@ -19,6 +19,9 @@ const login = new Leaf({
       isReady(leaf) {
         return leaf.value.password && leaf.value.username;
       },
+      onFail(leaf, response) {
+        leaf.do.update('failure', response.data ? response.data : 'error');
+      },
       onResponse(leaf, postResponse) {
         if (postResponse.data && postResponse.data.user) {
           leaf.do.update('success', postResponse.data.user);
@@ -27,6 +30,20 @@ const login = new Leaf({
         } else {
           leaf.do.update('failure','error');
         }
+      },
+      forOutput(leaf) {
+        return {
+          username: leaf.value.username.value,
+          password: leaf.value.password.value
+        }
+      },
+      submit (leaf) {
+        if (!leaf.do.isReady()) return;
+        if (leaf.value.status !== 'entering') return;
+        leaf.do.setStatus('sending');
+        axios.post('/api/login', leaf.do.forOutput())
+          .then(leaf.do.onResponse)
+          .catch(leaf.do.onFail);
       },
       update(leaf, status, response) {
         leaf.do.setStatus(status);
@@ -39,17 +56,6 @@ const login = new Leaf({
           response: null
         });
       },
-      onFail(leaf, response) {
-        leaf.do.update('failure', response.data ? response.data : 'error');
-      },
-      submit (leaf) {
-        if (!leaf.do.isReady()) return;
-        if (leaf.value.status !== 'entering') return;
-        leaf.do.setStatus('sending');
-        axios.post('/api/login', leaf.value)
-          .then(leaf.do.onResponse)
-          .catch(leaf.do.onFail);
-      }
     }
   }
 )
