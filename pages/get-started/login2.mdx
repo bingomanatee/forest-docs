@@ -1,0 +1,11 @@
+import { LoginForm2 } from '../../examples/login/version_2'
+
+
+The backend team wants to make sure you at least make sure the values don't have spaces in them, and are busy thinking
+of more interesting requirements for usernames and passwords; and they want to display errors if the field has been touched.
+
+treating fields as a single value doesn't cut it any more, so you add a branch for each field with custom handling,
+and render the input fields around those branches. Luckily you can pass a branch into a component and work on its
+local context, and it will still feed back to the parent.
+
+<LoginForm2 />
