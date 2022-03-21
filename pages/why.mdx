@@ -1,4 +1,4 @@
-# @Wonderlandlabs/Forest
+# Why use Forest?
 
 Forest was written as a reaction to Redux and the family of patterns and software that came after it.
 In my opinion Redux was a singularly wrong opinion on how to handle state management, and the
@@ -55,7 +55,7 @@ This means, if you want to do any composition with actions:
 1. The Redux manager sends every action update to all subscribers, and allow any consuming code to respond after the fact.
 2. Any subscribers will pick up on all the noise from 1, which can be very expensive.
 
-Take for instance a Redux state that has a point {x, y}; it may have actions like SET_X (value), SET_Y (value), SCALE(scalar)
+Take for instance a Redux state that has a point `{x, y}`; it may have actions like SET_X (value), SET_Y (value), SCALE(scalar)
 and OFFSET(x, y);
 
 Well that's fine - but if you want to ensure x and y are numeric you have to either (a) put saga watchers
