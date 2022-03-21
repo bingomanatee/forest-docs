@@ -1,14 +1,6 @@
 import {Leaf} from '@wonderlandlabs/forest';
 import { useEffect, useState } from 'react'
 
-const axios = {
-  post (url, data) {
-    return new Promise((done, fail) => {
-
-    });
-  }
-}
-
 export const LoginForm = () => {
   const [state, setState] = useState(false);
   const [login, setLogin] = useState(null);
@@ -20,7 +12,6 @@ export const LoginForm = () => {
         status: 'entering',
       },
       {
-        debug: 3,
         selectors: {
             isReady({ username, password }) {
             return !!(password && username);
@@ -28,19 +19,15 @@ export const LoginForm = () => {
         },
         actions: {
           reset(leaf)  {
-            leaf.next({
-              password: '',
-              status: 'entering',
-            });
+            leaf.do.setUsername('');
+            leaf.do.setPassword('');
+            leaf.do.setStatus('entering');
           },
         }
       }
     )
 
-    const sub = login.subscribe((value) => {
-      console.log('>>> setting value as ', value);
-      setState(value);
-    });
+    const sub = login.subscribe(setState);
 
     setLogin(login);
 
@@ -51,17 +38,18 @@ export const LoginForm = () => {
 
   if (!(state && login)) return '';
 
-  console.log('rendering with state:', state);
   return <>
    <div className="login-box">
     <div className="flex-item">
       <h2>Username</h2>
-      <input type="text" value={state.username} onChange={(event) => {
-        login.do.setUsername(event.target.value);
-        console.log('un: login is now ', login.toJSON(true));
-      }} />
+      <input type="text" value={state.username}
+        onChange={(event) => {
+        login.do.setUsername(event.target.value);}} />
       <h2>Password</h2>
-      <input type="text" value={state.password} onChange={(event) => login.do.setPassword(event.target.value)} />
+      <input type="text" value={state.password}
+        onChange={(event) => {
+          login.do.setPassword(event.target.value)
+        }} />
     </div>
      <div className="flex-item">
        <button type="submit" disabled={!state.$isReady}>Log In</button>
