@@ -1,5 +1,5 @@
 export default {
-  github: 'https://github.com/bingomanate/forest',
+  github: 'https://github.com/bingomanatee/forest',
   docsRepositoryBase: 'https://github.com/bingomanatee/forest-docs',
   titleSuffix: ' – Forest',
   logo: (
