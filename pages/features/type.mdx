@@ -1,0 +1,160 @@
+# Type
+
+Although as described in [actions](/features/actions), the *form* of a value is by default locked-in, there is another
+level of specificty, *type*.
+
+Leaf remembers the *form* of the first value of the leaf as one of
+- `FORM_MAP`
+- `FORM_OBJECT`
+- `FORM_ARRAY`
+- `FORM_LEAF`
+- `FORM_FUNCTION`
+- `FORM_VALUE` (if none of the above is true).
+
+This ia fairly coarse test; you can replace a number with a string, say, or null,
+and Leaf will allow it.
+
+If the *type* option is set to true, Leaf restricts updates of scalar values to a more specific value type
+-- or one of the above forms of a compound value):
+
+- `TYPE_STRING`
+- `TYPE_NUMBER`
+- `TYPE_DATE`
+
+You can also set the type explicitly using these constants, or an array of
+constants `[TYPE_DATE, TYPE_NUMBER]` to accept any of several types/forms.
+
+```javascript
+
+      const num = new Leaf(100, { type: true });
+      const numUntyped = new Leaf(100);
+      const numAny = new Leaf(100, { any: true });
+
+      num.subscribe(value => console.log('num value: ', value));
+      numUntyped.subscribe(value => console.log('numUntyped value: ', value));
+      numAny.subscribe(value => console.log('numAny value: ', value));
+
+      num.next(200);
+      numUntyped.next(200);
+      numAny.next(200);
+      try {
+        num.next('three hundred');
+      } catch (err) {
+        console.log('type error:', err);
+      }
+      numUntyped.next('three hundred');
+      numAny.next('three hundred');
+      num.next(400);
+      numUntyped.next(400);
+      numAny.next(200);
+
+      try {
+        num.next([500]);
+      } catch (err) {
+        console.log('num form error: ', err);
+      }
+
+      try {
+        numUntyped.next([500]);
+      } catch (err) {
+        console.log('numUntyped form error: ', err);
+      }
+      numAny.next([500]);
+
+      num.next(600);
+      numUntyped.next(600);
+      numAny.next(600);
+
+      /**
+       *
+       num value:  100
+       numUntyped value:  100
+       numAny value:  100
+       num value:  200
+       numUntyped value:  200
+       numAny value:  200
+       type error: Error: incorrect type for leaf [ROOT]
+       numUntyped value:  three hundred
+       numAny value:  three hundred
+       num value:  400
+       numUntyped value:  400
+       num form error:  Error: incorrect type for leaf [ROOT]
+       numUntyped form error:  Error: incorrect form for leaf [ROOT]; wanted Symbol(form:value), got Symbol(form:array)
+       numAny value:  [ 500 ]
+       num value:  600
+       numUntyped value:  600
+       numAny value:  600
+       */
+
+```
+If you want to restrict the type of a leaf's properties, define a branch for that property
+with type = true in the options (or one of the constants defined above for specific expectations)
+
+### `TYPE_ANY`
+
+If you want to disable ALL type checking, pass `any` = true on configurations;
+this sets the type to TYPE_ANY and bypasses all form and type checking.
+
+
+## Tests
+
+You can achieve even more granularity with a `test`. A test is a function that, if it throws, will block the updating
+of a value.
+
+Tests check values for any number of conditions and any positive return value or thrown error will preempt a change from
+passing through and initiate a cross-system rollback to the previous state. Either throwing errors or returning
+values (or errors) will signal a test failure. Returning falsy values (or not explicitly returning anything) will
+allow the value to pass.
+
+There is no guaranteed order of execution of tests.
+
+Test functions are passed a Change instance that has the following signature:
+```{
+  target : (your leaf)
+  value: (your submitted change)
+  next: (a blend of your change and the current value -- or in simpler types, will be identical to value)
+}```
+
+Do not attempt to change the value or the target leaf in any way inside a test.
+
+```javascript
+
+const numLeaf = new Leaf(0, {
+  test({ next }) {
+    if (next < 0) throw new Error('cannot be negative');
+    if (next % 2) return 'must be even';
+  },
+});
+
+numLeaf.subscribe(value => console.log('leaf value: ', value));
+
+numLeaf.next(4);
+
+try {
+  numLeaf.next(5);
+} catch (err) {
+  console.log('error:', err);
+}
+ console.log('leaf is still', numLeaf.value);
+
+numLeaf.next(8);
+try {
+  numLeaf.next(-4);
+} catch (err2) {
+  console.log('error 2:', err2);
+}
+console.log('leaf is still', numLeaf.value);
+numLeaf.next(10);
+
+/**
+  leaf value:  0
+  leaf value:  4
+  error: Error: must be even
+  leaf is still 4
+  leaf value:  8
+  error 2: Error: cannot be negative
+  leaf is still 8
+  leaf value:  10
+*/
+
+```

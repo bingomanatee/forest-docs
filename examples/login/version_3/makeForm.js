@@ -6,7 +6,6 @@ const axios = {
     return new Promise((done, fail) => {
       setTimeout(() => {
         const response = {data: {user:{...data, id: 1234}}};
-        console.log('sending response', response);
         done(response);
       }, 2000);
     });
@@ -34,6 +33,15 @@ export function makeForm() {
           }
         })
       },
+      selectors: {
+        isReady({ username, password, status }) {
+          try {
+            return username.$isValid && password.$isValid && (status === 'entering');
+          } catch (err) {
+            console.log('error: ', err);
+          }
+        },
+      },
       actions: {
         update(leaf, status, response) {
           leaf.do.setStatus(status);
@@ -51,32 +59,17 @@ export function makeForm() {
             leaf.do.update('failure', 'error')
           }
         },
-        forOutput(leaf) {
-          return {
-            username: leaf.value.username.value,
-            password: leaf.value.password.value
-          }
-        },
         submit(leaf) {
-          if (!leaf.do.isReady()) {
-            return
-          }
-          if (leaf.value.status !== 'entering') {
+          if (!leaf.$$.get('$isReady')) {
             return
           }
           leaf.do.setStatus('sending')
-          axios.post('/api/login', leaf.do.forOutput())
+          axios.post('/api/login', {
+            username: leaf.value.username.value,
+            password: leaf.value.password.value
+          })
             .then(leaf.do.onResponse)
             .catch(leaf.do.onFail)
-        },
-        isReady(leaf) {
-          if (!(leaf.value.password.value && leaf.value.username.value)) {
-            return false
-          }
-          if (!leaf.branch('username').do.isValid() || !leaf.branch('password').do.isValid()) {
-            return false
-          }
-          return true
         },
         reset(leaf) {
           leaf.next({

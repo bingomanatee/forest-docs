@@ -85,15 +85,16 @@ import {Leaf, isNum} from '@wonderlandlabs/forest';
                 topLeft: point(0, 0),
                 bottomRight: point(1, 1)
               },
-              actions: {
-                width(leaf) {
-                  return Math.abs(leaf.value.bottomRight.x - leaf.value.topLeft.x);
+              selectors: {
+                width({bottomRight, topLeft}) {
+                  return Math.abs(bottomRight.x - topLeft.x);
                 },
-                height(leaf) {
-                  return Math.abs(leaf.value.topLeft.y - leaf.value.bottomRight.y);
+                height({bottomRight, topLeft}) {
+                  return Math.abs(topLeft.y - bottomRight.y);
                 },
-                area(leaf) {
-                  return leaf.do.width() * leaf.do.height();
+                area({bottomRight, topLeft}) {
+                  return Math.abs(bottomRight.x - topLeft.x)
+                    *  Math.abs(topLeft.y - bottomRight.y);
                 }
               }
             });
@@ -103,16 +104,25 @@ import {Leaf, isNum} from '@wonderlandlabs/forest';
         });
 
         box.do.setBottomRight({x: 50, y: 50});
-        console.log('box area:', box.do.area());
 
 /**
-      ... is now { color: 'red', topLeft: { x: 0, y: 0 }, bottomRight: { x: 1, y: 1 } }
+      ... is now { color: 'red', topLeft: { x: 0, y: 0 }, bottomRight: { x: 1, y: 1 }, $width: 1, $height: 1, $area: 1 }
       ... is now {
         color: 'red',
         topLeft: { x: 0, y: 0 },
-        bottomRight: { x: 50, y: 50 }
+        bottomRight: { x: 50, y: 50 },
+        $width: 50,
+        $height: 50,
+        $area: 2500
       }
-      box area: 2500
 */
 
 ```
+
+The "branches" are sub-leafs whose value is treated like an ordinary field in the root's value.
+
+Selectors are computed fields based on the leaf's value (and that of its branches); its output are prefixed with '$'
+to distinguish them from base settable fields.
+
+the "do" property creates automatic change functions for all the leaf's fields, including fields managed by branches
+as shown here. You can add custom methods here too.

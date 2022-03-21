@@ -1,0 +1,59 @@
+# Testing Leafs
+
+Leafs are extremely easy to test; as long as you have a factory function that lest you inject any environmental
+dependencies (DB connections, constants, http bridge classes), you can easily create tests around any leaf you want.
+Leaf itself is extensively covered with unit tests; here is one to give a sample of how testing a leaf looks:
+
+```javascript
+
+
+function makePoint(x, y, z) {
+  return new Leaf(
+    {},
+    {
+      branches: p(x, y, z),
+    }
+  );
+}
+
+it('should have consistent branch values', () => {
+  const box = new Leaf(
+    {},
+    {
+      branches: {
+        topLeft: makePoint(0, 1, 0),
+        topRight: makePoint(1, 1, 0),
+        bottomLeft: makePoint(0, 0, 0),
+        bottomRight: makePoint(1, 0, 0)
+      },
+    }
+  );
+  expect(box.version).toBe(0);
+  expect(box.value).toEqual({
+    topLeft: p(0, 1, 0),
+    topRight: p(1, 1, 0),
+    bottomLeft: p(0, 0, 0),
+    bottomRight: p(1, 0, 0)
+  });
+  box.branch('topLeft.x').next(3);
+  expect(box.value).toEqual({
+    topLeft: p(3, 1, 0),
+    topRight: p(1, 1, 0),
+    bottomLeft: p(0, 0, 0),
+    bottomRight: p(1, 0, 0)
+  });
+  expect(box.version).toBe(1);
+  expect(box.branch('bottomLeft').version).toBe(0);
+
+  box.branch('topRight.z').next(6);
+  expect(box.value).toEqual({
+    topLeft: p(3, 1, 0),
+    topRight: p(1, 1, 6),
+    bottomLeft: p(0, 0, 0),
+    bottomRight: p(1, 0, 0)
+  });
+  expect(box.version).toBe(2);
+  expect(box.branch('bottomLeft').version).toBe(0);
+});
+
+```

@@ -1,0 +1,32 @@
+# Selectors
+
+Selectors may superficially appear like actions; however they are designed for a different purpose and connect
+to your value differently than actions.
+
+A selector is a function that takes the value and returns a value from it. A typical set of selectors might be
+`max`, `round`, `fullName`, etc. They are purely synchronous.
+
+Selectors' values are cached(1) for each version of a leaf. Its assumed they are unique and consistent for each
+iteration of the value; so you wouldn't want to use `Math.random()` or absolute time inside a selector.
+Selector functions accept the leaf as a whole as the second argument. Mostly this shouldn't be necessary; but
+if you want to use shared computation across multiple selectors, you can use (non-value-changing) actions to
+derive values inside a selector.
+
+## Selector values
+
+A Leaf's selector values are accessed off of the '$$' property of the leaf, in a map. This is useful for
+*non-compound*/ scalar leafs; for instance, as they cannot be combined with the leaf value.
+
+Scalar values are appended to a leaf's value *to subscribers* by name; a "$" is appended to their name
+to distinguish them from the fundamental data of a leaf.(2) you can also call `myLeaf.valueWithSelectors()` to get
+this combination value directly off the leaf.
+
+## Adding selectors
+
+You can manually add additional selectors with the `myLeaf.addSelector(name, value)` method.
+
+----------
+
+(1) a technical note: leaf's version is *null* during a direct next update; and in that state, selectors are
+*not* cached because a leaf value in transition may be updated multiple times as changes feed back from branches.
+(2) for this reason, try to avoid using "$"-prefixed fields in a leaf.

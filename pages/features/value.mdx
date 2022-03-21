@@ -1,0 +1,176 @@
+# Leaf's Value
+
+There are no limitations on the Leaf's value - the first argument of the leaf. A leaf's value can be an object, a map,
+a string, number, Date, array, or whatever.
+
+<div className="callout">
+Objects and Maps will get cloned every time one of their values change; so it's not a good idea to use an object that
+relies on its prototype for meaning; for instance putting a DOM object into a Leaf is probably going to be problematic.
+</div>
+
+Objects, maps, and arrays are considered **compound** values;
+they will(1) get setters inferred for their values in the `.do` method collection.
+
+A leaf's current value is accessed from the `myLeaf.value` property.
+
+```javascript
+
+const numberLeaf = new Leaf(6);
+const stringLeaf = new Leaf('Bob');
+const objectLeaf = new Leaf({x: 0, y: 0});
+const mapLeaf = new Leaf(new Map([
+  ['x', 0],
+  ['y', 0]
+]));
+
+numberLeaf.next(10);
+console.log('new number leaf value:', numberLeaf.value);
+
+stringLeaf.next('Rick');
+console.log('new string leaf value: ', stringLeaf.value);
+
+objectLeaf.next({y: 3, z: 6});
+console.log('new object leaf value', objectLeaf.value);
+
+mapLeaf.next(new Map([['y', 3], ['z', 6]]));
+console.log('new map leaf value', mapLeaf.value);
+
+/**
+      new number leaf value: 10
+      new string leaf value:  Rick
+      new object leaf value { x: 0, y: 3, z: 6 }
+      new map leaf value Map(3) { 'x' => 0, 'y' => 3, 'z' => 6 }
+*/
+
+```
+
+## `next(value)` - changing the value wholesale
+
+You can update the entire leaf's value with `myInstance.next(newValue)`. For simple values (strings, text, etc.) the
+new entry will simply replace the last one. for **compound** values the new fields will be "blended" into the existing
+collection. i.e., it will add new properties or update the old ones, but you will never lose properties/map keys
+with a next call.
+
+Next, like all of Leaf code, is *synchronous*. Its effects happen immediately after it is called, and is reflected
+in `myLeaf.value` and sent out to any [subscribers](/features/subscription) immediately. So, for instance,
+inside [actions](/features/actions) you can get the current value of a leaf directly from leaf.value right after
+you call `next` (or a setField action, or another action that changes the leaf):
+
+```javascript
+     const fibo = new Leaf([1, 2], {
+        actions: {
+          nextValue(leaf, numberOfValues = 1) {
+            for (let i = 0; i <= numberOfValues; ++i) {
+              const last = leaf.value[leaf.value.length - 1];
+              const prev = leaf.value[leaf.value.length - 2];
+              leaf.next([...leaf.value, last + prev]);
+            }
+          }
+        }
+      });
+
+      fibo.subscribe(value => console.log('fibonacci series is now ', value));
+      fibo.do.nextValue();
+      fibo.do.nextValue(5);
+      fibo.do.nextValue(2);
+      /**
+       *
+         fibonacci series is now  [ 1, 2 ]
+         fibonacci series is now  [ 1, 2, 3, 5 ]
+         fibonacci series is now  [
+         1,  2,  3,  5,  8,
+         13, 21, 34, 55, 89
+         ]
+         fibonacci series is now  [
+         1,  2,  3,  5,   8,  13,
+         21, 34, 55, 89, 144, 233,
+         377
+        ]
+       */
+
+```
+
+Being able to access the current state of the leaf in all contexts makes complex operations a lot easier.
+
+## Keeping the same form
+
+By default, Leaf borks if you change the "form" of a leaf's value. This is because leaf's are intendeded to be nestable,
+and a parent leaf should expect any of its branch leafs to be consistent.
+
+```javascript
+
+  const point = new Leaf({ x: 1, y: 2 });
+  point.subscribe(value => console.log('value of point', value));
+  point.next({ x: 3, y: 4 });
+  try {
+    point.next('Bob');
+  } catch (err) {
+    console.log('bad form error: ', err);
+  }
+  point.next({ x: 5, y: 6 });
+
+  /**
+   value of point { x: 1, y: 2 }
+   value of point { x: 3, y: 4 }
+   bad form error:  Error: incorrect form for leaf [ROOT]; wanted Symbol(form:object), got Symbol(form:value)...
+   value of point { x: 5, y: 6 }
+   */
+
+````
+
+You can disable form checking with the configuration property "any" - but use at your own risk; 'any' in combination
+with setters or branches can be unpredictable.
+
+```javascript
+
+const point = new Leaf({ x: 1, y: 2 }, { any: true });
+point.subscribe(value => console.log('value of  unguarded point', value));
+point.next({ x: 3, y: 4 });
+try {
+  point.next('Bob');
+} catch (err) {
+  console.log('unguarded bad form error: ', err);
+}
+point.next({ x: 5, y: 6 });
+
+/**
+ value of  unguarded point { x: 1, y: 2 }
+ value of  unguarded point { x: 3, y: 4 }
+ value of  unguarded point Bob
+ value of  unguarded point { x: 5, y: 6 }
+ */
+
+```
+
+## `delKeys(name | names[])`
+
+If you want to actually delete an index, you can pass one or more keys to `delKey` and it will remove them from a compound
+object.
+
+```javascript
+
+const objectLeaf = new Leaf({x: 0, y: 0});
+const mapLeaf = new Leaf(new Map([
+  ['x', 0],
+  ['y', 0]
+]));
+
+objectLeaf.next({y: 3, z: 6});
+console.log('new object leaf value', objectLeaf.value);
+
+mapLeaf.next(new Map([['y', 3], ['z', 6]]));
+console.log('new map leaf value', mapLeaf.value);
+mapLeaf.delKeys('y');
+console.log('new map leaf value without y', mapLeaf.value);
+
+/**
+  new number leaf value: 10
+  new string leaf value:  Rick
+  new object leaf value { x: 0, y: 3, z: 6 }
+  new map leaf value Map(3) { 'x' => 0, 'y' => 3, 'z' => 6 }
+  new map leaf value without y Map(2) { 'x' => 0, 'z' => 6 }
+*/
+
+```
+
+(1) -- branch Leaf instances only generate setters if properly configured -- see [branches](/features/brances) for more details.

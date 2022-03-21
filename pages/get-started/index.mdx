@@ -11,7 +11,7 @@ Lets take the classic login form, with a username and password.
 const login = new Leaf({
     username: '',
     password: '',
-    status: 'entering',
+    status: 'entering'
   },
   {
     selectors: {
@@ -23,16 +23,44 @@ const login = new Leaf({
       reset(leaf)  {
         leaf.do.setUsername('');
         leaf.do.setPassword('');
-        leaf.do.setStatus('entering');.
-      },
+        leaf.do.setStatus('entering');
+      }
     }
   }
 )
 
 ```
 
-Using react bindings, we add this into the state of a form:
+We will bind the output of this leaf to React using state variables:
 
+```javascript
+const [state, setState] = useState(false);
+  const [login, setLogin] = useState(null);
+  useEffect(() => {
+
+    const login = new Leaf(//...
+    );
+
+    const sub = login.subscribe(setState);
+
+    setLogin(login);
+
+    return () => {
+      sub.unsubscribe();
+    }
+  }, []);
+
+````
+
+This does two things:
+
+1. it transports the leaf's value to state where we can use it in out components
+2. it ensures that when the state changes, the component re-draws.
+
+The net effect is a single component with managed local state.
+You usually want to send out the leaf instance itself as a state property so you can call its methods.
+
+### Login Form
 ```jsx
 import {Leaf} from '@wonderlandlabs/forest';
 import { useEffect, useState } from 'react'
@@ -42,8 +70,8 @@ export const LoginForm = () => {
   const [login, setLogin] = useState(null);
   useEffect(() => {
 
-    const login = new Leaf(....);
-
+    const login = new Leaf(//...
+    );
     const sub = login.subscribe(setState);
     setLogin(login);
 
@@ -59,13 +87,10 @@ export const LoginForm = () => {
     <div className="flex-item">
       <h2>Username</h2>
       <input type="text" value={state.username}
-        onChange={(event) => {
-        login.do.setUsername(event.target.value);}} />
+        onChange={(event) => {login.do.setUsername(event.target.value);}} />
       <h2>Password</h2>
       <input type="text" value={state.password}
-        onChange={(event) => {
-          login.do.setPassword(event.target.value)
-        }} />
+        onChange={(event) => {login.do.setPassword(event.target.value)}} />
     </div>
      <div className="flex-item">
        <button type="submit" disabled={!state.$isReady}>Log In</button>
@@ -78,21 +103,14 @@ export const LoginForm = () => {
      </>
 }
 
-
 ```
-
-
-This we will wrap with local state into a React form:
 
 <LoginForm />
 
 ## Some detail of what is going on here
 
-The first argument to new Leaf is the value. It can be an object, or a Map, or a single value
+The first argument to new Leaf is the **value**. It can be an object, or a Map, or a single value
 of any type you wish.
 
-There are two types of actions in Leaf instances. One is automatic --
-Objects and Maps will automatically generate setters for the properties they have at creation.
-The other one is manual; the configuration (second) parameter has actions that we can use
-to update the action in more detail. You can call other actions from inside actions, as we
-do here, in the reset action, that clears all the
+The second argument is the Leaf **configuration**. It includes amongst other things callable **actions**
+(methods) and **selectors** -- functions that compute on the value and return calculated values on '$' fields of the value.

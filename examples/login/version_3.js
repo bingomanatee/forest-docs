@@ -9,12 +9,7 @@ export const LoginForm3 = () => {
 
     const login = makeForm();
 
-    const sub = login.subscribe({
-    next (value){
-      const state = { ...value, isReady: login.do.isReady() }
-      setState(state)
-    },
-  })
+    const sub = login.subscribe(setState)
 
     setLogin(login)
 
@@ -34,7 +29,7 @@ export const LoginForm3 = () => {
         <LeafInput status={state.status} branch={login.branch('password')} />
       </div>
       <div className='flex-item'>
-        <button type='submit' onClick={login.do.submit} disabled={!login.do.isReady()}>Log In</button>
+        <button type='submit' onClick={login.do.submit} disabled={!state.$isReady}>Log In</button>
         <button type='reset' onClick={login.do.reset}>Reset</button>
       </div>
     </div>

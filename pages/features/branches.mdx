@@ -1,0 +1,150 @@
+# Branches
+
+A branch is a sub-leaf that governs the value of one of your leaf's *fields*. its only relevant in object/Map (1)
+(compound) value type.
+
+What good is a branch? A branch allows you to:
+
+1. Accomplish the Reducer pattern of redux - one master state with a bunch of tactical states that can intercommunicate
+2. use type and test configuration to control the form of a value's field(s).
+3. Add local actions to a branch to change sub-fields of a leaf.
+4. Add state selectors to more easily create a status/summary of the leaf's branch state.
+5. Create reusable leaf components such as field managers that can be managed inside a factory
+
+## Shared transactions
+
+A branch exists within the same transactional bubble as its parent. This means even if you subscribe to and directly
+change a branch's value, if the parent is in a transaction, your subscription will be muffled until the parent's
+transaction completes.
+
+Branches were used in the [form example, version 2](/get-started/login2) code:
+
+```javascript
+
+export function makeField(title, type, validator) {
+  return new Leaf({
+      title,
+      value: '',
+      type,
+      touched: false
+    },
+    {
+      setters: true,
+      selectors: {
+        isValid({ value , touched}) {
+          return touched && (!validator(value));
+        },
+        isEmpty({ value }) {
+          return !value
+        },
+        errors({ touched, value }) {
+          if (!touched) return '';
+          if (!value) {
+            return 'must have a value'
+          }
+          return validator(value)
+        }
+      },
+      actions: {
+        reset(leaf){
+          leaf.do.setValue('');
+          leaf.do.setTouched(false);
+        },
+        update(leaf, value) {
+          leaf.do.setValue(value);
+          leaf.do.setTouched(true);
+        },
+      }
+    });
+}
+
+    const login = new Leaf({
+        status: 'entering',
+        response: null
+      },
+      {
+        branches: {
+          username: makeField('User Name', 'text', (value) => {
+            if (/[\s]+/.test(value)) {
+              return 'username cannot have spaces'
+            }
+          }),
+          password: makeField('Password', 'password', (value) => {
+            if (/[\s]+/.test(value)) {
+              return 'password cannot have spaces'
+            }
+            if (value.length < 8) {
+              return 'password must be 8 or more characters';
+            }
+          })
+        },
+        selectors: {
+          isReady({ password, username }) {
+            console.log('isValid from', password, username)
+            return (password.$isValid && username.$isValid);
+          },
+        },
+        actions: {
+          reset(leaf) {
+            leaf.next({
+              status: 'entering',
+              response: null,
+            });
+            leaf.branch('username').do.reset();
+            leaf.branch('password').do.reset();
+            leaf.do.setStatus('entering');
+          }
+        }
+      }
+    )
+```
+
+branches can be directly accessed by name using the `myLeaf.branch('username')` method; however if you want to get
+a branches' value, you can access it by name directly off the value of the parent branch:
+
+## changing a branches' value
+
+There are many ways to change a branch's value: (2)
+
+1. *implicitly* via next in the parent leaf: `myLeaf.next({branchName: branchValue})`
+2. *implicitly* using the parent leaf's `myLeaf.do.set[BranchName](branchValue)`
+3. *directly* using the branch's next method: `myLeaf.branches(branchName).next(branchValue)`
+4. *directly* using the branch's actions: `myLeaf.branches(branchName).do.setField(value)`.
+
+## Branch Actions
+
+if you *manually define* a branch's action, you can always use it; however the field setters are *not* automatically
+created for branches, to reduce the amount of clutter in deeply nested branches.
+
+There are two ways to enable setters in branches:
+
+1. **globally** by passing the option `{setters: 'all'}` to the root leaf
+2. **locally** by passing the option `{setters: true}` to the branch.
+
+You can also "tactically" create a few setters with manual actions.
+
+## Dynamic Branches
+
+The `myInstance.branch(name, newBranch)` method can actually create a new branch. So, if you want to do a database
+mirroring leaf, you can write factories for tables or records, and add managed records on the fly.
+
+Branches can also be deleted by calling `myInstance.delKeys(branchName)`. This will both remove the leaf's value in the
+parent, and detach the branch from the parent leaf.
+
+use `delKeys` carefully -- if it's used in an action, you will *not* get the branch definition back if a thrown error
+reverts the transaction; you will get its value back though. If you need to delete branches often, a "soft delete" may work better;
+i.e., create a "deleted" field in the branch and a selector that returns only live branches.
+
+## `parent` and `root` references
+
+A sub-branch can directly access it's parent off the `myLeaf.parent` property. That value will be null for a "root leaf".
+the `myleaf.root` property will access the *topmost* parent in a Leaf tree; it will return itself if called from the root leaf.
+
+## Circular Trees
+
+Do not create circular structures by branching a parent leaf into one of its sub-leaves. That is bad and will create
+bad things to happen. Leafs in a Leaf tree should all be unique.
+
+------
+(1) it might work in the array context as well but hasn't been tested
+(2) also, you can call `myLeaf.set(name, value)` on either the branch or the root, with name being the branch's name.

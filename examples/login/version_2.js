@@ -30,11 +30,11 @@ export const LoginForm2 = () => {
         },
         selectors: {
           isReady({ password, username }) {
-            return  (!(password.$isValid && username.$isValid))
+            console.log('isValid from', password, username)
+            return (password.$isValid && username.$isValid);
           },
         },
         actions: {
-
           reset(leaf) {
             leaf.next({
               status: 'entering',
@@ -42,18 +42,13 @@ export const LoginForm2 = () => {
             });
             leaf.branch('username').do.reset();
             leaf.branch('password').do.reset();
+            leaf.do.setStatus('entering');
           }
         }
       }
     )
 
-    const sub = login.subscribe({
-    next (value){
-      const state = { ...value, isReady: login.do.isReady() }
-      setState(state)
-    },
-  })
-
+    const sub = login.subscribe(setState);
     setLogin(login)
 
     return () => {
@@ -68,11 +63,11 @@ export const LoginForm2 = () => {
   return <>
     <div className='login-box'>
       <div className='flex-item'>
-        <LeafInput branch={login.branch('username')} />
-        <LeafInput branch={login.branch('password')} />
+        <LeafInput branch={login.branch('username')} status={state.status} />
+        <LeafInput branch={login.branch('password')} status={state.status} />
       </div>
       <div className='flex-item'>
-        <button type='submit' disabled={!login.do.isReady()}>Log In</button>
+        <button type='submit' disabled={!state.$isReady}>Log In</button>
         <button type='reset' onClick={login.do.reset}>Reset</button>
       </div>
     </div>

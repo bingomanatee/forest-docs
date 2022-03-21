@@ -30,9 +30,9 @@ export function makeField(title, type, validator) {
           leaf.do.setTouched(false);
         },
         update(leaf, value) {
-          leaf.do.setValue(value)
-          leaf.do.setTouched(true)
+          leaf.do.setValue(value);
+          leaf.do.setTouched(true);
         },
       }
-    })
+    });
 }

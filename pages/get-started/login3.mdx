@@ -9,7 +9,10 @@ within transactions, and async code by definition escapes the start/stop of the 
 By breaking the async respond/fail handlers into separate actions, we can break an async *process* into a series
 of synchronous stages. And at this point, we break the login form into its own function.
 
-Part of that form is a "faux HTTP Transport", an axios simulator, that returns data with a delay...
+Part of that form is a "faux HTTP Transport", an axios simulator, that returns data with a delay.
+The root Leaf is now big enough to justify moving it to its own module.
+
+### Root Component Leaf factory
 
 ```javascript
 import { Leaf } from '@wonderlandlabs/forest'
@@ -20,7 +23,6 @@ const axios = {
     return new Promise((done, fail) => {
       setTimeout(() => {
         const response = {data: {user:{...data, id: 1234}}};
-        console.log('sending response', response);
         done(response);
       }, 2000);
     });
@@ -48,6 +50,15 @@ export function makeForm() {
           }
         })
       },
+      selectors: {
+        isReady({ username, password, status }) {
+          try {
+            return username.$isValid && password.$isValid && (status === 'entering');
+          } catch (err) {
+            console.log('error: ', err);
+          }
+        },
+      },
       actions: {
         update(leaf, status, response) {
           leaf.do.setStatus(status);
@@ -65,32 +76,17 @@ export function makeForm() {
             leaf.do.update('failure', 'error')
           }
         },
-        forOutput(leaf) {
-          return {
-            username: leaf.value.username.value,
-            password: leaf.value.password.value
-          }
-        },
         submit(leaf) {
-          if (!leaf.do.isReady()) {
-            return
-          }
-          if (leaf.value.status !== 'entering') {
+          if (!leaf.$$.get('$isReady')) {
             return
           }
           leaf.do.setStatus('sending')
-          axios.post('/api/login', leaf.do.forOutput())
+          axios.post('/api/login', {
+            username: leaf.value.username.value,
+            password: leaf.value.password.value
+          })
             .then(leaf.do.onResponse)
             .catch(leaf.do.onFail)
-        },
-        isReady(leaf) {
-          if (!(leaf.value.password.value && leaf.value.username.value)) {
-            return false
-          }
-          if (!leaf.branch('username').do.isValid() || !leaf.branch('password').do.isValid()) {
-            return false
-          }
-          return true
         },
         reset(leaf) {
           leaf.next({
@@ -105,11 +101,12 @@ export function makeForm() {
   )
 }
 
-
 ```
 
 And a slightly updated UX to include feedback for success. Also passing up status to the input classes to lock them
 during and after transport.
+
+### Root component
 
 ```jsx
 import { useEffect, useState } from 'react'
@@ -123,12 +120,7 @@ export const LoginForm3 = () => {
 
     const login = makeForm();
 
-    const sub = login.subscribe({
-    next (value){
-      const state = { ...value, isReady: login.do.isReady() }
-      setState(state)
-    },
-  })
+    const sub = login.subscribe(setState)
 
     setLogin(login)
 
@@ -148,7 +140,7 @@ export const LoginForm3 = () => {
         <LeafInput status={state.status} branch={login.branch('password')} />
       </div>
       <div className='flex-item'>
-        <button type='submit' onClick={login.do.submit} disabled={!login.do.isReady()}>Log In</button>
+        <button type='submit' onClick={login.do.submit} disabled={!state.$isReady}>Log In</button>
         <button type='reset' onClick={login.do.reset}>Reset</button>
       </div>
     </div>
@@ -159,6 +151,7 @@ export const LoginForm3 = () => {
      </pre>
   </>
 }
+
 ```
 
 <LoginForm3 />
