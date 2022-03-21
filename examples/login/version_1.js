@@ -18,18 +18,19 @@ export const LoginForm = () => {
         username: '',
         password: '',
         status: 'entering',
-        response: null
       },
       {
-        actions: {
-          isReady(leaf) {
-            return !!(leaf.value.password && leaf.value.username);
+        debug: 3,
+        selectors: {
+            isReady({ username, password }) {
+            return !!(password && username);
           },
+        },
+        actions: {
           reset(leaf)  {
             leaf.next({
               password: '',
               status: 'entering',
-              response: null
             });
           },
         }
@@ -37,8 +38,8 @@ export const LoginForm = () => {
     )
 
     const sub = login.subscribe((value) => {
-      const state = {...value, isReady: login.do.isReady()};
-      setState(state);
+      console.log('>>> setting value as ', value);
+      setState(value);
     });
 
     setLogin(login);
@@ -50,16 +51,20 @@ export const LoginForm = () => {
 
   if (!(state && login)) return '';
 
+  console.log('rendering with state:', state);
   return <>
    <div className="login-box">
     <div className="flex-item">
       <h2>Username</h2>
-      <input type="text" value={state.username} onChange={(event) => login.do.setUsername(event.target.value)} />
+      <input type="text" value={state.username} onChange={(event) => {
+        login.do.setUsername(event.target.value);
+        console.log('un: login is now ', login.toJSON(true));
+      }} />
       <h2>Password</h2>
       <input type="text" value={state.password} onChange={(event) => login.do.setPassword(event.target.value)} />
     </div>
      <div className="flex-item">
-       <button type="submit" disabled={!login.do.isReady()}>Log In</button>
+       <button type="submit" disabled={!state.$isReady}>Log In</button>
        <button type="reset" onClick={login.do.reset}>Reset</button>
      </div>
   </div>

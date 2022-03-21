@@ -28,14 +28,13 @@ export const LoginForm2 = () => {
             }
           })
         },
-        actions: {
-          isReady(leaf) {
-            if (!(leaf.value.password.value && leaf.value.username.value)) return false;
-            if (!leaf.branch('username').do.isValid() || !leaf.branch('password').do.isValid()) {
-              return false;
-            }
-            return true;
+        selectors: {
+          isReady({ password, username }) {
+            return  (!(password.$isValid && username.$isValid))
           },
+        },
+        actions: {
+
           reset(leaf) {
             leaf.next({
               status: 'entering',

@@ -8,27 +8,31 @@ export function makeField(title, type, validator) {
       touched: false
     },
     {
-
+      setters: true,
+      selectors: {
+        isValid({ value , touched}) {
+          return touched && (!validator(value));
+        },
+        isEmpty({ value }) {
+          return !value
+        },
+        errors({ touched, value }) {
+          if (!touched) return '';
+          if (!value) {
+            return 'must have a value'
+          }
+          return validator(value)
+        }
+      },
       actions: {
         reset(leaf){
-          leaf.next({value: '', touched: false});
+          leaf.do.setValue('');
+          leaf.do.setTouched(false);
         },
         update(leaf, value) {
           leaf.do.setValue(value)
           leaf.do.setTouched(true)
         },
-        isValid(leaf) {
-          return !leaf.do.errors()
-        },
-        isEmpty(leaf) {
-          return !leaf.value.value
-        },
-        errors(leaf) {
-          if (leaf.do.isEmpty()) {
-            return 'must have a value'
-          }
-          return validator(leaf.value.value)
-        }
       }
     })
 }
