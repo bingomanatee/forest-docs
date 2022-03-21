@@ -2,7 +2,8 @@
   "value": "Leaf Values, 'next', delKeys",
   "subscription": "Subscription: listening to change",
   "actions" : "Actions - automatic and custom value changers",
+  "selectors": "Derived values",
   "type" : "Types and Tests - protecting bad values",
   "branches" : "Branches - nested Leafs for local control",
-  "rxjs_immer": "Rxjs and Immer integration"
+  "configuration" : "Configuration Options"
 }

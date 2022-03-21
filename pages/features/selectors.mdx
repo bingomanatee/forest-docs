@@ -1,3 +1,7 @@
+---
+title: Selectors
+---
+
 # Selectors
 
 Selectors may superficially appear like actions; however they are designed for a different purpose and connect
@@ -24,6 +28,14 @@ this combination value directly off the leaf.
 ## Adding selectors
 
 You can manually add additional selectors with the `myLeaf.addSelector(name, value)` method.
+
+## Action or Selector?
+
+* If you want a function that changes the Leaf value(s) - **only use actions**
+* Both Selectors and actions can return values; action's returns can be got from `instance.do.myAction()`'s return value
+* If your output depends on things outside the Leaf (real time, random numbers, etc) use *actions*
+* If your action is asynchronous either use actions *very carefully* or use an *external async function* that acts on a Leaf instance
+* If you want the output of your function to be the input of *other* (actions or selectors) make it an *action*.
 
 ----------
 

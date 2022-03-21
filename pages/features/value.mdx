@@ -1,3 +1,7 @@
+---
+title: Value and Next
+---
+
 # Leaf's Value
 
 There are no limitations on the Leaf's value - the first argument of the leaf. A leaf's value can be an object, a map,
@@ -11,7 +15,7 @@ relies on its prototype for meaning; for instance putting a DOM object into a Le
 Objects, maps, and arrays are considered **compound** values;
 they will(1) get setters inferred for their values in the `.do` method collection.
 
-A leaf's current value is accessed from the `myLeaf.value` property.
+A leaf's current value is accessed from the `myLeaf.value` property. Do not alter that property directly; use [actions](/features/actions) or `next(newValue)`;
 
 ```javascript
 
