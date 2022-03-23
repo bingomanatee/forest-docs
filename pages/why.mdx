@@ -168,10 +168,10 @@ go out of scope. It's even fine to use in server-side systems.
 
 ## Leverages Immer's immutability
 
-Forest provides an integrated version, LeafImmer, that uses the immutable library Immer
-to establish immutable values for all complex types; meaning,
-no user action is required to observe change in complex values, and there is no opportunity to
-accidentally change a shared value inside consuming code.
+Forest provides an integrated version, LeafImmer, that uses the immutable library [Immer](https://immerjs.github.io/immer/)
+to establish immutable values for all complex types;
+meaning, no user action is required to observe change in complex values,
+and there is no opportunity to accidentally change a shared value inside consuming code.
 
 ## And it tests.
 
@@ -180,7 +180,7 @@ Leafs are classic objects and are fantastically easy to test; they don't require
 inject things like fetch methods into those functions and easily stub out network calls in a test
 scenario.
 
-The fact that Forest instances are self-contained makes them much more amenable to basic test introspection.
+The fact that Leaf instances are self-contained makes them much more amenable to basic test introspection.
 
 ## In Sum - the users' bill of rights.
 
@@ -192,24 +192,25 @@ I have the right not to have to use async methods to track basic change. State s
 
 ### I have the right to intercept, filter and terminate any signal mid-flight.
 
-I don't have to lose the ability to stop a change from occurring or be a slave to the tempo of my state system.
-These signals include change requests as well as specific user actions, next signals and all meaningful
-triggers inside the forest system.
+This means my sub-fields have the right to their own identity, and to interpret or refuse any incoming change
+based on whatever rules I specify.
 
 ### I have the right to write dynamic state
 
 I have the right to mix transient with long-lived state as the needs of my application change.
 I should be able to load a state on-the-fly or use it transiently in a context, as needed.
 
-### I have the right to code compositionally..
+### I have the right to code compositionally
 
-...And in my normal function I have the right to get and call my states' fields and other actions.
-This also means I have the right to pause updates during complex operations to prevent unhelpful
-mid-process broadcast of my sub-actions.
+...And I have the right to get and call my states' fields and other actions. And in compositional design,
+I have the right to be able to roll back the entire set of changes on a thrown error.
 
 ### I have the right to design my state in a single easy to read file
 
-Really. One file. And it should be straightforward and easy to read.
+The actions I write should be just as straightforward as the functions in the rest of my code.
+I should be able to write simple, synchronous procedures without resorting to any sort of custom
+conventions, or splitting action and their consequences in multiple functions because my system doesn't
+react immediately to the changes I make.
 
 ### I have the right to test my state using any testing mechanic I want.
 
@@ -218,3 +219,4 @@ I shouldn't have to create a complex DOM simulation to test a business logic ele
 -----
 
 (1) Saga does allow for some reactivity and proper ordering of side effects; however you have to actively re-poll,
+which makes for some very messy code.
