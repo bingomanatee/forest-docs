@@ -1,0 +1,28 @@
+# State Matters
+
+Any decent-sized client side application quickly develops specific requirements and business logic
+that cannot be tossed over the fence into the backend.
+
+* Form Validation
+* Cart Management
+* User grant enforcement
+
+Redux the initial engineering mistake has been supplanted by hooks; but the gains in speed meant
+losses in testability and control over form and content of data.
+
+Typescript does its best at enforcing _tactical_ control over values, but is not adequate for managing
+_strategic_ management of values (buy two get one free, max 1 per customer, passwords must match).
+
+State systems that do not actively model structure and form abdicate the responsibility for control over
+activity and their own content, and that, in my mind, is a copout.
+
+Forest is an attempt to make a strong capable state system that can be used locally or globally,
+has the capacity for extremely strong type and context-aware constraints, is fault tolerant, and gives
+the user the ability to write deep, nested mutators. It is highly influenced by RxJS and Immer (and uses
+both of those libraries) and promotes view-independent testing.
+
+Forest uses a series of nested "Leafs", or nodes, to represent complex states; they can be nested as deep as necessary
+to give control context to the system. Mutator actions can be written relative to whichever Leaf contains the information
+they need to execute, and changes in child Leafs percolate to the parent.
+
+Leaf broadcasts to view contexts via RxJS observers. Each Leaf (or the root Leaf) can be monitored for changes.

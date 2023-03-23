@@ -1,0 +1,29 @@
+.container {
+    float: right;
+    width: 50%;
+    margin: 1em;
+    margin-right: 0;
+    font-size: 2rem;
+    line-height: 160%;
+    color: rgba(0,0,0,0.85);
+    font-style: italic;
+    font-family: Georgia, Gararmond, 'Times New Roman', sans-serif;
+}
+
+.container p {
+    font-size: 2rem;
+    line-height: 160%;
+}
+
+@media (prefers-color-scheme: dark) {
+    .container {
+        color: rgba(255,255,255, 0.85);
+    }
+}
+
+
+.container header > img {
+    width: 50%;
+    margin-left: 25%;
+    margin-right: 25%;
+}

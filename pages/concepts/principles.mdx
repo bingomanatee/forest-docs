@@ -1,0 +1,224 @@
+# Design Principles
+
+Forest is an attempt to meet _all_ the real world requirements for proper state and application mamagement:
+
+1. proper **control over type** and data
+2. **Independent** of any specific view implementation, especially during testing
+3. A **single system** for global and component-local state
+4. Fault tolerance and **transactional commits**
+5. **Synchronous** and observable changes
+6. **Composable actions** -- high and low level mutators that can call each other
+7. Easy **reuse** of useful design patterns
+8. The ability to ***develop quick and readable states**
+9. **Conservative broadcast** of updates that only includes fully complete, validated values
+10. **Nestable**, flexible systems with actions relative to the root or any particular branch or child node in the system
+11. **Fully testable** state systems that do not rely on any specific test framework
+
+Most state systems hit at best half of these items. Forest more or less does them all.
+
+## 1. Control over Types and Data
+
+There is more to data control than type management -- although that is definitely important. You also need to control
+the entire _system_. Whether that means ensuring that in a wizard, say, you can only go to the next step when the
+current one is complete, _but_ you can navigate to any completed step easily. Or, if you are managing a library, that
+a customer can have a maximum of six books in his cart -- less, if he has already checked out other books.
+
+Typescript allows for very flexible but _static_ constraints. A true state system needs to allow for _dynamic_ constraints.
+These are functional.
+
+Along these lines, if you can clean up data, its better to do that than to reject it. For instance, if your cart can't
+have any empty items, its better to filter out empty slots than to throw an error. Punitive constraints should always
+defer to self-healing code that removes bad data without interrupting application flow.
+
+## 2. Independence from specific context
+
+Writing a state system that only operates in a single ecosystem is not only short-sighted; it also means you are likely
+going to have issues testing it without constantly spinning up that view system. And, you will always be chasing the tail
+of your view systems' updates and breaking changes.
+
+Lastly, there is just no good reason to create dependence. Why limit your audience to a particular tribe? Why, for instance,
+disallow your system from being used in server-side systems?
+
+## 3. Usable globally or locally
+
+A good state system can be applied to tactical problems such as an autocomplete widget, as well as a global management
+system for (say) user identity and shopping carts. There is no reason to (as was done in Redux) mandate a globally
+available provider of state, and to bloat it with all required code for an entire application.
+
+Hooks are great by they by and large are designed for local consumption. This also means that the metabolism of your state
+system relies on the view update temp. When I call `setLocalValue(newValue)`, the `localValue` property does not immediately
+reflect the new submission. So, you have to wait for a memo to run to reflect the value. And if the view component is removed
+from the dom, your new value may _never ever be received_, because the whole context got purged _after_ you requested a change
+but _before_ your memoized hooks had a chance to receive it.
+
+A module-provided resource, on the other hand, will survive for as long as the page is not refreshed. This makes it
+a much more stable target for mission critical updates.
+
+## 4. Transactional Commits
+
+There is plenty of detail throughout this documentation. In a nutshell, you should be able to bundle a complex series of
+operations and roll **all of them back** if a failure condition is triggered. Say you are building an app to position furniture
+in a house. You have an `offsetFurniture(x, y)` method that delegates to the furniture's polygon's points' `offset(x, y)`
+method.
+
+When all is said and done, _all the points of the polygon must be inside the house_ or the entire `offsetFurniture` method
+(and all its side effects) must be rolled back.
+
+In a redux system, if the "offsetPoint" method is called several times, and you inspect the data and find an "out of house"
+error, _TOO BAD_ -- not only have you committed the change **permanantly** with no way to retrieve the "last good state"
+but you have also updated all the **subscribers** to each point move - the points have been crawling along like a snail,
+one by one, which is wierd.
+
+With Transactional control, you can throttle the subscribers' perception of change to only update on the _committed,
+verified version_ of the data, no matter how many operations happened within a transactional closure. This is how
+databases work, and there is a reason for that.
+
+## 5. Synchronous Change
+
+There is no good reason for change to be delayed, in the context of a single system. You should be able to see the effects
+of your changes _immediately_ and use it to make decisions within your procedures. I.e, if your system models a vehicle,
+you should be able to write code like this:
+
+```javascript
+
+    class CarState {
+      constructor() {
+        this.tires = [];
+        this.engine = null;
+        this.coolingSystem =null;
+      }
+
+      isSafe = false;
+
+      get drivable() {
+        return this.tires.length === 4 && this.engine && this.coolingSystem;
+      }
+
+      runSafetyTest() {
+        // simulate car on track
+      }
+    }
+
+    const car = new CarState();
+
+    car.tires = [{id: 111222}, {id: 111222} , {id: 111222}, {id: 111222}];
+    car.engine = {id: 3333};
+    car.coolingSystem = {id: 4444};
+
+    if (car.drivable) {
+      try {
+        car.runSafetyTest();
+        car.isSafe = true;
+        } catch (err) {
+        car.isSafe = false;
+      }
+    }
+
+```
+
+if on the other hand you had a wierd async system like this:
+
+```javascript
+
+    class CarState {
+      constructor() {
+        this.tires = [];
+        this.engine = null;
+        this.coolingSystem =null;
+      }
+
+      _engine: null;
+      get engine() {
+        return this._engine;
+      }
+
+      set engine(engine) {
+        setTimeout(() => this._engine = engine, Math.random() * 1000);
+      }
+
+      isSafe = false;
+
+      get drivable() {
+        return this.tires.length === 4 && this.engine && this.coolingSystem;
+      }
+
+      runSafetyTest() {
+        // simulate car on track
+      }
+    }
+
+    const car = new CarState();
+
+    car.tires = [{id: 111222}, {id: 111222} ,{id: 111222}, {id: 111222}];
+    car.engine = {id: 3333};
+    car.coolingSystem = {id: 4444};
+
+    if (car.drivable) {
+      try {
+        car.runSafetyTest();
+        car.isSafe = true;
+        } catch (err) {
+        car.isSafe = false;
+      }
+    }
+
+```
+
+well, your car wouldn't be drivable. In fact your engine is in a transitional state. You might try to set the engine,
+once you realized that was the problem, again. And due to the randomness of the completion, you never are going to know
+for sure what the engine is / will be!
+
+Why do that to yourself? or anyone? State systems should immediately reflect their last set values -- even if that is
+done in a transactional closure, it should reflect the pending state, so you can build on your pending work, in real time.
+
+## 6. Compositional methods
+
+Given transactional control you can also _compose_ actions -- and call mutators from other mutators.
+
+## 7. Easy reuse of patterns
+
+It is very difficult to transport part of a Redux system into another context. That is because the actions and the data
+exist in totally discrete places, and it is very difficult to take an operation that applies to a sub-part of the reducer
+and transport it into another part. This is a consequence of treating the store content itself like a black box.
+If your data _and_ the mutators are bundled (as is done in OOP), it is easy to take working concepts from one model
+and reuse them in another.
+
+But what about the "Diamond of Sadness" in OOP? well, if you are using compositional design to create and configure your
+system, you can choose which "parent bits" to apply, _and_ in which order, _and_ you can override conflicts after the fact.
+So there are plenty of opportunities to blend solutions in whatever manner you please.
+
+## 8. Rapid development of readable systems
+
+You should be able to quickly spin up a system and test it - this implies, your system should be containable in a single file,
+and it should be relatively easy to read and figure out what is happening. If there is a single quality of Redux that
+pisses me off more than any other it is the difficulty of rapid application development. It is so verbose that it encourages
+multi-file development, and it has functions that call functions that call functions; further, you have to articulate
+setters for each and every property you want to change, and that is just way too much typing.
+
+The more boilerplate in your code, the more difficult it is to pick out the "not boilerplate" (and of course that is
+most likely the thing that is "not working", and the reason you are ploughing through it in the first place. )
+
+## 9. Conservative updates of state change
+
+This it the third corner of the triad of compositional actions and transactional control: you should be able to do
+many small changes (and see their results) without provoking rendition of the updates until you have completed a cycle
+of change. (and validated your work.) This means that your updates to your consumers should be _far more infrequent_
+than your activity. In Redux, there is zero difference between a unit of work and emission of updates to consumers.
+
+Incremental work is the foundation of scalable systems. You cannot have performant systems without having control over
+the quantity of updates published to expensive consumers. This is the principal behind all the memoization and
+callback control in React, and it is a vital criteria for developing responsive applications.
+
+This also means that if you are observing a subset of the state, you should be able to further throttle your updates
+to the subset of data you care about. There is no reason to re-render _every_ change when the scope of change is
+outside of your selected data. Hooks use dependency arrays for this; components use parameter lists, and that is one of
+the reason that HOC is used as the mechanic for Redux. But your system itself should have this capacity, so you can test
+for efficient data updates without leaning on your view systems' mechanics.
+
+## 10. Fully testable.
+
+There is no reason for a flight simulator to have wings. You should be able to test your state outside of its consumers;
+this is not only faster, it allows you to determine exactly where in the application errors are creeping in.
+
+And its not only a little faster -- it tends to be orders of magnitude faster. Faster tests mean faster development and
+faster feedback.

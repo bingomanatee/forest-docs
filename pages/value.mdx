@@ -1,0 +1,397 @@
+# Leaf `.value` property
+
+The Leaf `.value` property is a passthrough to the `.store.value` property.
+
+_All complex values are passed through immer_. this means:
+
+* subscribed-to values cannot be modified
+* a complex value whose content has been modified is _guaranteed_ to be referentially unique
+* You cannot depend on any object or array of objects to respect any prototype
+
+That is, if you put an array of `User` instances into Forest2, none of them will pass the `instanceof User` test
+after they come out a subscription, or are retrieved from `myForest.value` or the `.value` of any child etc.
+
+**Forest is a store of INFORMATION** -- it is **NOT** a store of references to anything. If you want to store a reference
+to a thing, either put it into the `.meta` collection of a leaf or use it in closure or as a parameter to an argument.
+
+## The Store
+
+Every Leaf contains its value in a `@wonderlandlabs/collect` instance, referred to by the `.store` property.
+there is a "real" validated store attached to every leaf. However, during transactions, if a transaction
+has changed the leaf's value (but has not been committed), the store property may temporarily return a reference
+to a "pending" store, attached to the result of a transaction, that will be accepted into the leaf's "real" store
+once _all_ transactions have been fully committed.
+
+This means that during transactions, the value of any leaf "in flux" will reflect the "optimistic" value that has
+been asserted for it, until all transactions have been flushed.
+
+note, all Leaf actions are also transactions, so in the below documentation, assume "transactions" also includes
+setter actions.
+
+## Married With Children
+
+Whichever store is valid at the moment, a clone of it is blended with any child values and that store's value is
+returned as the `.value` property of the leaf. This "blended" value is cached. However, the cache is cleared with each
+additional transaction, or every time a transaction is rolled back.
+
+## Referential integrity
+
+This means in short, the referential identity of a leaf with changes (or downstream from changed chilldren) will change.
+The cloning and updating of an object type value will _not_ respect the parent prototype; Forest, and Leaves, manage and
+mutate "plain" objects, and are not safe places to put instances that depend on inherited prototypes
+for methods or static properties.
+
+That being said, if a Leaf has not changed, and it has no children, its value shouldn't change from transaction to transaction.
+Leaf with children, however, may change referentially due to transactions, even if they have no actual changes; this
+overly aggressive updating may be optimized through future releases to be more conservative but at the moment,
+
+the golden rule is, container types (objects, maps, etc.) with children will **definitely change**
+after (and during) transactions. Container types without children **may** change if their fields are changed by
+transactions.
+
+## Changing value
+
+The most direct way to change a leaf's value is through assignment.
+
+```javascript
+
+const count = new Forest({
+  $value: 0
+})
+
+count.subscribe(console.log);
+
+count.value = 1;
+count.value = 'two';
+count.value = 3;
+
+/*
+0
+1
+two
+3
+ */
+
+```
+
+You can assign objects, maps, etc. directly to the value, and they will be accepted. You can even (dangerously) change
+the value to a different type.
+
+However with good constraints, you can limit updates to be specific types. The simplest way to do this is to
+constrain acceptable changes to the same type as the initial value:
+
+```javascript
+
+const count2 = new Forest({
+  $value: 0,
+  type: true
+})
+
+count2.subscribe(console.log);
+
+count2.value = 1;
+try {
+  count2.value = 'two';
+} catch (err) {
+  console.log('--- error: ', err.message);
+}
+count2.value = 3;
+
+/**
+0
+1
+--- error:  cannot add value of type string to leaf root (type number)
+3
+
+*/
+```
+
+You can also assign a named type to `type`: 'string', 'array', 'object', 'number'... or, an array of type strings.
+You can also simply set it to `true` to infer type from its initial value.
+
+```javascript
+
+const staticForest = new Forest({
+  $value: 0,
+  type: ['string', 'number']
+});
+
+staticForest.subscribe(console.log);
+
+staticForest.value = 1;
+staticForest.value = 'two';
+staticForest.value = 3;
+
+try {
+  staticForest.value = [4, 5];
+} catch (err) {
+  console.log('--- error: ', err.message);
+}
+
+staticForest.value = 4;
+
+/*
+0
+1
+two
+3
+--- error:  cannot add value of type array to leaf root (type string or number)
+4
+ */
+```
+
+## Children and assignation
+
+Child values are _asserted upwards_ when assigned new values, and _injected downwards_;
+so, there is no way to easily delete the key of a leaf for which a child has been mapped.
+
+By contrast properties that are _not mapped to children_ can be erased through assignment:
+
+```javascript
+const { Forest } = require('@wonderlandlabs/forest')
+
+const point = new Forest({
+  $value: { x: 0 },
+  children: { y: 0, z: 0 }
+})
+
+point.subscribe((value) => {
+    console.log('---')
+    console.log('forest value:', value, 'root local value:', point.localValue);
+    console.log('y child leaf value: ', point.child('y').value);
+    console.log('z child leaf value: ', point.child('z').value)
+});
+
+point.value = { x: 1 }
+point.value = { y: 2 }
+point.child('y').value = 3
+point.value = { x: 10, y: 20, z: 30 }
+point.child('z').value = 'stringy stringy'
+/*
+
+---
+forest value: { x: 0, y: 0, z: 0 } root local value: { x: 0 }
+y child leaf value:  0
+z child leaf value:  0
+---
+forest value: { x: 1, y: 0, z: 0 } root local value: { x: 1 }
+y child leaf value:  0
+z child leaf value:  0
+---
+forest value: { y: 2, z: 0 } root local value: { y: 2 }
+y child leaf value:  2
+z child leaf value:  0
+---
+forest value: { y: 3, z: 0 } root local value: { y: 2 }
+y child leaf value:  3
+z child leaf value:  0
+---
+forest value: { x: 10, y: 20, z: 30 } root local value: { x: 10, y: 20, z: 30 }
+y child leaf value:  20
+z child leaf value:  30
+---
+forest value: { x: 10, y: 20, z: 'stringy stringy' } root local value: { x: 10, y: 20, z: 30 }
+y child leaf value:  20
+z child leaf value:  stringy stringy
+ */
+
+```
+
+note how the 'x' property disappears after the second assignment because it was not protected by a child,
+_or_ present in the assigned value.
+
+At the moment, assigning different **types** of values to a leaf with children creates messy or confusing scenarios;
+just don't do it. (best is to set 'type: true' in the config)
+You **can** assign different types of values to child leaves, and it will work just fine (unless they have children).
+
+You can also prevent this from happening with type constraints on child nodes.
+In this case we are generous with 'z', allowing any scalar,
+but specific with 'y', limiting it to its initial type (number).
+
+```javascript
+const { Forest } = require('@wonderlandlabs/forest');
+
+const point = new Forest({
+  $value: { x: 0 },
+  children: {
+    y: { $value: 0, type: true },
+    z: {
+      $value: 0, type: ['number', 'string']
+    }
+  }
+});
+
+point.subscribe((value) => {
+    console.log('---')
+    console.log('forest value:', value, 'root local value:', point.localValue)
+    console.log('y child leaf value: ', point.child('y').value)
+    console.log('z child leaf value: ', point.child('z').value)
+  });
+
+point.value = { x: 1 }
+point.value = { y: 2 }
+point.child('y').value = 3
+try {
+  point.child('y').value = 'four';
+} catch (err) {
+  console.log('y assignment error:', err.message);
+}
+point.value = { x: 10, y: 20, z: 30 }
+point.child('z').value = 'stringy stringy'
+try {
+  point.child('z').value = [4]
+} catch (err) {
+  console.log('z assignment error:', err.message);
+}
+/*
+---
+forest value: { x: 0, y: 0, z: 0 } root local value: { x: 0 }
+y child leaf value:  0
+z child leaf value:  0
+---
+forest value: { x: 1, y: 0, z: 0 } root local value: { x: 1 }
+y child leaf value:  0
+z child leaf value:  0
+---
+forest value: { y: 2, z: 0 } root local value: { y: 2 }
+y child leaf value:  2
+z child leaf value:  0
+---
+forest value: { y: 3, z: 0 } root local value: { y: 2 }
+y child leaf value:  3
+z child leaf value:  0
+y assignment error: cannot add value of type string to leaf root:y:f7b4243d-a00c-436e-a9ed-ed1e76f1ed0c (type number)
+---
+forest value: { x: 10, y: 20, z: 30 } root local value: { x: 10, y: 20, z: 30 }
+y child leaf value:  20
+z child leaf value:  30
+---
+forest value: { x: 10, y: 20, z: 'stringy stringy' } root local value: { x: 10, y: 20, z: 30 }
+y child leaf value:  20
+z child leaf value:  stringy stringy
+z assignment error: cannot add value of type array to leaf root:z:8fb69be4-6bfd-4278-b71a-de9fad280459 (type number or string)
+ */
+
+```
+
+## Property actions
+
+Object-based leaves will be assigned actions based on their _initial_ profile.
+
+```javascript
+
+const { Forest } = require('@wonderlandlabs/forest')
+
+const point = new Forest({
+  $value: { x: 0 },
+  children: {
+    y: 0, z: {
+      $value: 0, type: true
+    }
+  },
+  actions: {
+    setAll(leaf, x, y, z) {
+      leaf.do.set_x(x)
+      leaf.do.set_y(y)
+      leaf.do.set_z(z)
+    }
+  }
+})
+
+point.subscribe({
+  next(value) {
+    console.log('---')
+    console.log('forest value:', value, 'root local value:', point.localValue)
+    console.log('y child leaf value: ', point.child('y').value)
+    console.log('z child leaf value: ', point.child('z').value)
+  },
+  error(err) {
+    console.log('fatal error:', err.message);
+  }
+})
+
+point.do.set_x(1)
+point.do.set_y(2)
+point.value = {}
+point.child('y').value = 3
+point.do.setAll(10, 20, 30)
+point.value = {y: ['it was the best of times', 'it was the worst of times']}
+try {
+  point.child('z').value = 'stringy stringy'
+} catch (err) {
+  console.log('error:', err.message);
+}
+point.do.set_z(40);
+/*
+---
+forest value: { x: 0, y: 0, z: 0 } root local value: { x: 0 }
+y child leaf value:  0
+z child leaf value:  0
+---
+forest value: { x: 1, y: 0, z: 0 } root local value: { x: 1 }
+y child leaf value:  0
+z child leaf value:  0
+---
+forest value: { x: 1, y: 2, z: 0 } root local value: { x: 1 }
+y child leaf value:  2
+z child leaf value:  0
+---
+forest value: { y: 2, z: 0 } root local value: {}
+y child leaf value:  2
+z child leaf value:  0
+---
+forest value: { y: 3, z: 0 } root local value: {}
+y child leaf value:  3
+z child leaf value:  0
+---
+forest value: { x: 10, y: 20, z: 30 } root local value: { x: 10 }
+y child leaf value:  20
+z child leaf value:  30
+---
+forest value: {
+  y: [ 'it was the best of times', 'it was the worst of times' ],
+  z: 30
+} root local value: { y: [ 'it was the best of times', 'it was the worst of times' ] }
+y child leaf value:  [ 'it was the best of times', 'it was the worst of times' ]
+z child leaf value:  30
+error: cannot add value of type string to leaf root:z:9cb75dbd-2b23-4dda-b6a8-bd2ad86a9f8c (type number)
+---
+forest value: {
+  y: [ 'it was the best of times', 'it was the worst of times' ],
+  z: 40
+} root local value: { y: [ 'it was the best of times', 'it was the worst of times' ] }
+y child leaf value:  [ 'it was the best of times', 'it was the worst of times' ]
+z child leaf value:  40
+ */
+
+```
+
+Setters are created for both initial properties of the root _and_for initially defined child leaves.
+The setter actions when asked to set "x" in set all will update the root value.
+The setter actions will directly set children -- if they exist to be set.
+
+## Metadata
+
+If you want to store references to things like dom objects, you must attach them to a leaf as metadata.
+
+Metadata is stored internally as a "map collection". Metadata can be set but never overwritten or modified.
+you can access metadata through `forestInstance.getMeta(key)` or the `.getMeta(key)` method of any leaf.
+
+## Immer integration
+
+[Immer](https://immerjs.github.io/immer/) has been fully integrated into Forest.
+All complex (non-scalar) values are processed through immer,
+when expressed in the `.value` getter of Leaf or Forest instances.
+
+This has the following effects:
+
+1. You cannot modify the value of a Leaf or Forest instance directly by setting properties, adding elements
+   to an array, deleting properties, etc.
+2. Any time a sub-property or element of a complex value is changed, all parents of the changed value will be
+   different references than the previous versions. So, you don't have to worry about "buried" changes to a tree
+   structure.
+
+Immer is only used on the outbound value field as a cached snapshot; the actual values in Leafs are standard JS
+objects. I.e., you don't need to "immerize" any of your values or use/import Immer for Forest to work for you.
+But it also means that complex values you put into Forest will _never be referentially identical to the values you
+get out of it._

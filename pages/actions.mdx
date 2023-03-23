@@ -1,0 +1,348 @@
+import Callout from '../components/Callout';
+
+# Actions
+
+Actions are functions attached to the `.do` property of the Leaf.
+
+You may notice that there is little difference between an action and an external function. you would be eventually correct.
+
+```javascript
+
+function updatePoint(point, x, y) {
+  point.do.set_x(x);
+  point.do.set_y(y);
+}
+
+const point = new Forest({$value: {x: 0, y: 0},
+actions: {
+  update: updatePoint
+}});
+
+point.do.update(1, 2);
+console.log('update (internally) to {x: 1, y: 2} ', point.value);
+updatePoint(point, 3, 4);
+console.log('update (externally) to {x: 3, y: 4}', point.value);
+
+console.log('------ started to watch via subscribe() --------');
+point.subscribe((value) => console.log('subscribed value: ', value));
+
+point.do.update(10, 20);
+console.log('update (internally) to {x: 10, y: 20} ', point.value);
+updatePoint(point, 30, 40);
+console.log('update (externally) to {x: 30, y: 40}', point.value);
+
+/*
+update (internally) to {x: 1, y: 2}  { x: 1, y: 2 }
+update (externally) to {x: 3, y: 4} { x: 3, y: 4 }
+------ started to watch via subscribe() --------
+subscribed value:  { x: 3, y: 4 }
+subscribed value:  { x: 10, y: 20 }
+update (internally) to {x: 10, y: 20}  { x: 10, y: 20 }
+subscribed value:  { x: 30, y: 20 } <<< mid-action noise
+subscribed value:  { x: 30, y: 40 }
+update (externally) to {x: 30, y: 40} { x: 30, y: 40 }
+ */
+
+```
+
+However, code that occurs in an embedded action is _quieter_ and transitionally guarded; either all the changes are
+committed, or none of them are. And subscribers are not notified of those changes until all of them occur and are
+validated, and committed.
+
+This is one of those "nuance" differences that you may be indifferent to until your actions start throwing errors.
+
+## Action Parameters
+
+The action you write in the config file will always be passed the proper child as the first argument. _When calling_ the action
+you do NOT (and should not) pass that leaf in yourself - it will be done automatically.
+
+Any further parameters you want can be passed in after that.
+
+```javascript
+
+const count = new Forest({
+  $value: { count: 0 },
+  children: {
+    increment: {
+      $value: 1,
+      type: true,
+      test: (value) => {
+        if (value === 0) {
+          return 'increment cannot be set to zero'
+        }
+        return false
+      }
+    }
+  },
+  actions: {
+    inc(leaf, incr = undefined) {
+      if (incr !== undefined) {
+        leaf.do.set_increment(incr)
+      }
+      leaf.do.set_count(leaf.value.count + leaf.value.increment)
+      return leaf.value.count
+    }
+  }
+})
+count.subscribe(console.log)
+count.do.inc()
+count.do.inc(3)
+count.do.inc()
+count.do.inc()
+try {
+  // DO NOT pass leaf in as the first argument manually -- this is an error.
+  count.do.inc(count, 2)
+} catch (err) {
+  console.log('parameter error:', err.message)
+}
+count.do.inc(2)
+count.do.inc()
+
+/*
+
+{ count: 0, increment: 1 }
+{ count: 1, increment: 1 }
+{ count: 4, increment: 3 }
+{ count: 7, increment: 3 }
+{ count: 10, increment: 3 }
+parameter error: cannot add value of type object to leaf root:increment:11f7e64b-5877-4615-87df-a151a08f2887 (type number)
+{ count: 12, increment: 2 }
+{ count: 14, increment: 2 }
+
+ */
+
+```
+increment -- the optional second argument -- is passed into a setter action (see below); and if that fails, the value
+is _not_ incremented, nor is the bad value accepted. If you stupidly try to assert your Forest or a leaf as a parameter,
+it will be taken as the _second_ parameter -- not likely the intended result.
+
+You can, of course, write typescript checks into your functions
+-- however, they may not be completely transparent to the calling context.
+
+## Return values
+
+Leaf actions are not required to have a return value. But they can -- this is an example of writing a _selector_ - a function
+that returns a variation of the Leaf's value. This type of action can then be a "pure" function -- but it might not be
+depending on how it is written.
+
+Actions that are async will return a _promise_, as shown below.
+
+# Async actions
+
+Actions are treated as synchronous by the transaction system; that is, they are considered "done" when they return a value,
+even if that value is a Promise. This means that nothing in an async action is revertable on an error, whether that error
+is sync or async.
+
+```javascript
+
+const STATES = ['ready', 'sending', 'done', 'error']
+const cart = new Forest({
+  $value: {
+    cart: [],
+    status: 'ready',
+  },
+  children: {
+    status: {
+      $value: 'ready',
+      tests: (value) => {
+        if (!(STATES.includes(value))) {
+          return `invalid state set attempt: ${value} is an invalid state`
+        }
+      }
+    }
+  },
+  actions: {
+    changeAndSubmit(leaf, newState = 'sending') {
+      console.log('-- starting changeAndSubmit:', newState)
+      leaf.do.set_status(newState);
+      return leaf.do.submit();
+    },
+    submit: async (leaf) => {
+      console.log('----- starting submit');
+      const { cart } = leaf.value
+      return new Promise((done, fail) => {
+        setTimeout(() => {
+          if (leaf.value.cart.length > 3) {
+            leaf.do.set_status('error');
+            fail('api failure: too many items in cart (' + cart.length + '): 3 max.');
+          } else {
+            done({ saved: true, cart })
+            if (leaf.value.state !== 'error') {
+              leaf.do.set_status('done');
+            }
+          }
+        }, 500)
+      })
+    }
+  }
+})
+
+cart.subscribe({
+  next(v) {
+    console.log('');
+    console.log('>>> cart:', v)
+    console.log('');
+  },
+  error(err) {
+    console.log('fatal error:', err.message)
+  }
+})
+
+cart.do.set_cart(['apples', 'oranges'])
+cart.do.changeAndSubmit()
+  .then((result) => console.log('result:', result))
+  .catch((err) => {
+    console.log('cart error:', err)
+  })
+console.log('main thread (sent cart)');
+
+setTimeout(() => {
+  try {
+    cart.do.set_cart(['olives', 'peppers', 'rhubarb', 'apples', 'oranges'])
+    cart.do.changeAndSubmit()
+      .then((result) => console.log('cart 2 ASYNC result:', result))
+      .catch((err) => console.log('cart 2 ASYNC error:', err));
+  } catch (err) {
+    console.log('second send trapped SYNC error:', err.message);
+  }
+
+  console.log('main thread (sent cart again)');
+
+  setTimeout(() => {
+    cart.do.set_cart(['apples', 'oranges']);
+    try {
+      console.log('in timeout (sending a third time)');
+      cart.do.changeAndSubmit('crap 3 state')
+        .then((result) => console.log('cart 3 ASYNC result:', result))
+        .catch((err) => console.log('cart 3  ASYNC error:', err.message))
+      console.log('in timeout (sent cart a third time (with errors))');
+    } catch (err) {
+      console.log('--- crap 3 state error trapped SYNC error:', err.message);
+    }
+  }, 1500);
+}, 1500);
+
+/*
+
+>>> cart: { cart: [], status: 'ready' }
+
+
+>>> cart: { cart: [ 'apples', 'oranges' ], status: 'ready' }
+
+-- starting changeAndSubmit: sending
+----- starting submit
+
+>>> cart: { cart: [ 'apples', 'oranges' ], status: 'sending' }
+
+main thread (sent cart)
+
+>>> cart: { cart: [ 'apples', 'oranges' ], status: 'done' }
+
+result: { saved: true, cart: [ 'apples', 'oranges' ] }
+
+>>> cart: {
+  cart: [ 'olives', 'peppers', 'rhubarb', 'apples', 'oranges' ],
+  status: 'done'
+}
+
+-- starting changeAndSubmit: sending
+----- starting submit
+
+>>> cart: {
+  cart: [ 'olives', 'peppers', 'rhubarb', 'apples', 'oranges' ],
+  status: 'sending'
+}
+
+main thread (sent cart again)
+
+>>> cart: {
+  cart: [ 'olives', 'peppers', 'rhubarb', 'apples', 'oranges' ],
+  status: 'error'
+}
+
+cart 2 ASYNC error: api failure: too many items in cart (5): 3 max.
+
+>>> cart: { cart: [ 'apples', 'oranges' ], status: 'error' }
+
+in timeout (sending a third time)
+-- starting changeAndSubmit: crap 3 state
+test of  invalid state set attempt: crap 3 state is an invalid state returned invalid state set attempt: crap 3 state is an invalid state
+--- crap 3 state error trapped SYNC error: invalid state set attempt: crap 3 state is an invalid state
+
+ */
+```
+
+This hyper-paranoid code does sync AND async actions. Setting the cart and changing the status are sync actions.
+If they fail (and they sometimes do because status, the child leaf, has a validation test), they can be
+trapped **synchronously** by the calling context. However, synchronous try/catch does NOT trp the async part of
+the submit process; you can however receive the promise expressed out of submit
+(and indirectly out of changeAndSubmit)
+and use async trappers to contain the async errors.
+
+You can also call and trap sync actions and sync processes inside async actions. When possible, do
+sync changes synchronously, as is done here, by separating the sync processes and doing async processes in
+their own action.
+
+Here, we demonstrate a structural failure of JavaScript: Synchronous error trapping _**CANNOT INTERCEPT ASYNC ERRORS**_.
+
+This is true in any Javascript code, not just in Forest.
+
+So when expecting async errors, use async contexts to trigger them, and hopefully, trap them.
+
+## Dynamic `set` method
+
+There is a method that works for all container type: `myLeaf.set(keyName, value)`. Any sort of key can be used in this
+manner: strings and symbols for objects, numbers for arrays, and literally anything for a map.
+
+set can add new keys, or overwrite old ones' value. It delegates to setting the child if a child has been mapped to the key.
+
+`set(key, value)` will trigger validation, and throw if the value doesn't meet the type of the child or causes the target
+Leaf instance to fail its test(s). It is, in fact, what the `.do.set_keyname(value)` methods call, ultimately.
+
+It throws if the Leaf's value is not in the `container` family (object, map, set, array).
+
+
+
+
+### Automatic key setters
+<Callout className="small">
+  ### Why snake case for setters?
+
+  Version 1.0 of Forest (and LookingGlass Engine from which it was derived) used snakeCase for setters. However,
+  that created some difficult scenarios; for instance, if derived from a variable with different case variables such as
+  `{x: 1, X: 10}`, what would `myForest.do.setX(100)` change? Hard to say. So, with snake case, you aren't obligated
+  to mutate the name of the key suffix of the method allowing for `set_x` and `set_X` to coexist peacefully.
+</Callout>
+
+Along with the actions you define (if any) are "setter" actions, that are automatically generated on creation
+of the leaf. Setters are named `set_(keyname)` based on the key of the property to change. While objects _usually_ have
+names with constraints similar to javascript variables. As `keyname` is the name of a key of a JavaScript object
+-- OR the key of a JavaScript Map. SO technically Any string can be used for the `keyname`, and therefore a setter
+might end up being `set_a very bad variable name 3.14159...`.
+
+Setters are created based on the _initial_ keys of the leaf's value, as well as the keys of any children; as long
+as those keys are strings.
+
+Both use cases can cause some odd names if the keys are oddly named; object keys, and map keys, can have spaces, symbols,
+etc. in them. You can't of course call `myForest.do.set_a very bad variable name 3.14159...(100)`.
+However, you can if you want call`myForest.do['set_a very bad variable name 3.14159...'](100)` -- i.e., with array access.
+
+### Refreshing Setters
+
+If you update the value to have new keys, the setters will _not change_ unless you call `leafInstance.updateDo(true)`.
+After each call of updateDo, the setters will be based on the union of the current value including the child keys.
+
+### fixedSetters
+
+There are times when you want to lock in the setters; if you have a more rigid API
+and/or you want setters for optional properties that may or may not be present (yet),
+you can set the `.fixedSetters` property of the Leaf instance (or set it in its configuration)
+to freeze the keys for which setters actions are created.
+This will even cause the setters to ignore the keys of the value, and those of children.
+Once fixedSetters is defined, the setters only reflect its values.
+
+Having fixed set keys will override setters not only for the value keys but for any children.
+
+If you have fixedSetters defined, then `updateDo()` will not really do anything (regarding the setters);
+they will always be derived exclusively from the fixedSetters,
+regardless of the value of the leaf, or any children present.

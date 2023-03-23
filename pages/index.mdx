@@ -1,118 +1,221 @@
-import Bleed from 'nextra-theme-docs/bleed'
+# @wonderlandlabs/forest: data in time
 
-# Forest
+Forest is a transactional state engine. It allows you to create trees of leaves linked in a hierarchy of any
+useful depth.
 
-Forest is an advanced state engine, targeting React but self-contained and usable in any context
-in which you need structured transactional change management.
+It is designed to allow for expansively controlled data; that is, you can design rapidly without data value constraints
+and add type and value constraints as your application matures.
 
-## Primary Features
+## Compatibility
 
-* The ability to add type-aware schema to your state
-* Automatic setter actions for Object/Map Properties
-* Actions that can call other actions
-* Actions are methods that call methods on the leaf to change values - no "definition" middleware
-* Transactional scoping that ensures state reverts to pre-error status on thrown errors
-* A simple construction pattern that keeps the full definition of state and change actions in the same place
-* Full accessor functions to mutate Leaf structure post-creation, allowing factory functions to alter your Leaf
-* Leaf instances be fully tested without instantiating their host view
-* Direct integration with Immer for immutable values
-* The ability to nest Leaf structures through branches and reuse construction patterns
-* Designed to interoperate with RxJs: follows the observable pattern.
+Forest was written targeting React. It conforms to the Observable API of RxJS standards and can be used
+in any environment JavaScript environment.
 
-## A very simple example
+## Rapid Action Development
 
-Say you want to create a state that is a simple number, and add a few actions for utility:
+Actions are written directly in the configuration; they can use as their base scope the root,
+or any child at any depth.
 
 ```javascript
+const { Forest } = require("@wonderlandlabs/forest")
 
-import {Leaf, isNum} from '@wonderlandlabs/forest';
-
-const myNumber = new Leaf(0, {
-  type: true, // blocks new input of a different type than the initial value
-  actions: {
-    increment(leaf, offset = 1) {
-      leaf.next(leaf.value + offset);
-    }
-  }
-});
-
-myNumber.subscribe((value) => {
-  console.log('... is now', value);
-})
-
-myNumber.do.increment();
-myNumber.do.increment(2);
-myNumber.next(5);
-
-try {
-  myNumber.next('six');
-} catch (err) {
-  console.log('error: ', err);
+const pointValueActions = {
+  double: (leaf) => leaf.value = 2 * leaf.value,
+  halve: (leaf) => leaf.value = leaf.value / 2
 }
 
-myNumber.next(7);
+const point = new Forest({
+  $value: { x: 0, y: 0 },
+  children: {
+    x: { $value: 0, type: 'number', actions: pointValueActions },
+    y: { $value: 0, type: 'number', actions: pointValueActions }
+  },
+  actions: {
+    double(leaf) {
+      leaf.child('x').do.double()
+      leaf.child('y').do.double()
+    },
+    magnitude(leaf) {
+      const { x, y } = leaf.value
+      return (x ** 2 + y ** 2) ** 0.5
+    },
+    offset(leaf, x, y) {
+      leaf.do.set_x(leaf.value.x + x)
+      leaf.do.set_y(leaf.value.y + y)
+    }
+  }
+})
+
+point.subscribe({
+  next(value) {
+    console.log('value:', value)
+  },
+  error(err) {
+    console.log('error:', err)
+  }
+})
+
+point.value = { x: 10, y: 20 }
+console.log('point.magnitude:', point.do.magnitude())
+point.child('x').do.double()
+console.log('point.magnitude:', point.do.magnitude())
+point.do.offset(5, 15)
 
 /**
-* '...is now', 0
-* '...is now', 1
-* '...is now', 3
-* '...is now', 5
-* '...is now', 7
-*/
+ * value: { x: 0, y: 0 }
+ * value: { x: 10, y: 20 }
+ * value: { x: 10, y: 20 }
+ * point.magnitude: 22.360679774997898
+ * value: { x: 20, y: 20 }
+ * value: { x: 20, y: 20 }
+ * point.magnitude: 28.284271247461902
+ * value: { x: 25, y: 35 }
+ */
 
 ```
 
-## An Example with more fun
+This lets you create easily reusable patterns that can be injected anywhere in the tree that it is convenient.
+
+* The actions are also _composable_ -- actions can call other actions.
+* Actions can (a) return values, (b) change the leafs' value(s), or (c) do both.
+* Actions can take in parameters
+* Actions are _plain ,synchronous methods_. The change is immediately inspect-able as soon as they are called \
+  -- or even directly inside the action code itself.
+* Actions provide the leaf as the first argument: no confusion around "this", binding, etc.
+
+## Transactional binding
+
+Actions can throw errors; if you compose actions this creates a dilemma. If you call three actions from inside
+another action and then, on calling the fourth action, generate an error, _what state is the forests leaves in?_
+In standard procedural flow, this is a problem.
+
+However, given that all activity in Forest is encapsulated inside Transactions, activity follows these rules:
+
+1. All change is kept in a list of **pending changes**(on each leaf), and associated with the transaction that requested it
+2. Whenever a transaction causes an error to be thrown, leaves with pending changes are **cleared of any pending changes** associated with the failed transaction, \
+   _**or any transactions that came after it.**_
+3. If the calling context doesn't trap the thrown error, the previous transaction will be undone, and so on, \
+   ultimately returning the forest to the last validated state.
+4. Only after all transactions are validated and completed are the leaves' last values committed into the leaf.
+5. All actions are performed inside a transaction; so, if any activity inside an action throws an error (and it is not trapped), \
+   **ALL activity performed by the action will be undone**.
+6. Only after all transactions are completed and validated will any subscribers be notified of the forest's next value.
+
+Given that all change in a Forest instance's leaves is synchronous and immediate, this means that if you actively inspect
+a forest after calling an action or updating a leaves' value, you will see the result of that activity -- however,
+the value of the leaves will be temporarily pointed towards the _pending_ changes in the leaves' buffer.
+
+### Rolling back actions and changes
+
+Rule 5 above states that actions are all transactions. This means that if your action does three things and _then_ fails,
+ALL the changes done up to that point (inside the action) will be undone -- even if they themselves are not flawed.
+
+```javascript
+const { Forest } = require("@wonderlandlabs/forest")
+
+const pointValueActions = {
+  double: (leaf) => leaf.value = 2 * leaf.value,
+  halve: (leaf) => leaf.value = leaf.value / 2
+}
+
+const point = new Forest({
+  $value: { },
+  children: {
+    x: { $value: 0, type: true, actions: pointValueActions },
+    y: { $value: 0, type: true, actions: pointValueActions }
+  },
+  actions: {
+    double(leaf) {
+      leaf.child('x').do.double()
+      leaf.child('y').do.double()
+    },
+    magnitude(leaf) {
+      const { x, y } = leaf.value
+      return (x ** 2 + y ** 2) ** 0.5
+    },
+    offset(leaf, x, y) {
+      leaf.do.set_x(leaf.value.x + x)
+      leaf.do.set_y(leaf.value.y + y)
+    }
+  }
+})
+
+point.subscribe({
+  next(value) {
+    console.log('next value:', value)
+  },
+  error(err) {
+    console.log('error:', err)
+  }
+})
+
+point.value = { x: 10, y: 20 }
+console.log('point.magnitude:', point.do.magnitude())
+point.child('x').do.double();
+
+try {
+  point.value = {x: 40, y: 'fifty'}
+} catch (err) {
+  console.log('error:', err.message);
+}
+console.log('value unchanged:', point.value);
+
+try {
+  point.do.offset(10, 'six');
+} catch (err) {
+  console.log('error in offset', err.message);
+}
+console.log('value STILL unchanged:', point.value);
+console.log('point.magnitude:', point.do.magnitude())
+point.do.offset(5, 15)
+
+/**
+ * /Users/davidedelhart/.nvm/versions/node/v16.18.0/bin/node /Users/davidedelhart/Documents/repos/forest2-docs/lib/examples/index/transactions.js
+ * next value: { x: 0, y: 0 }
+ * next value: { x: 10, y: 20 }
+ * point.magnitude: 22.360679774997898
+ * next value: { x: 20, y: 20 }
+ * error: cannot add value of type string to leaf root:y:0fab282c-9fc2-4f17-a97b-775c704303c0 (type number)
+ * value unchanged: { x: 20, y: 20 }
+ * error in offset cannot add value of type string to leaf root:y:0fab282c-9fc2-4f17-a97b-775c704303c0 (type number)
+ * value STILL unchanged: { x: 20, y: 20 }
+ * point.magnitude: 28.284271247461902
+ * next value: { x: 25, y: 35 }
+ */
+
+
+```
+
+So setting the value to `{x: 40, y: 'fifty'}` will _completely fail -- even the update of y to 40 is not accepted.
+Similarly, the offset function calls two `set` methods. The first one succeeds -- but **BOTH** changes are wiped out
+when **ONE** of them fails, because they reverse the entire transaction that encapsulates all activity done inside the action.
+
+## Only real change is broadcast
+
+Not only are the results of intermediate changes not broadcast to subscribers, but "non-changes" are suppressed as well.
 
 ```javascript
 
-import {Leaf, isNum} from '@wonderlandlabs/forest';
+const num = new Forest({ $value: 0 });
+const history = watch(num);
+num.value = 1;
+num.value = 1;
+num.value = 2;
+num.value = 1;
+num.value = 1;
+num.value = 3;
 
-   function point(x, y) {
-          return new Leaf({x, y}, {
-            branches: {
-              x: new Leaf(x, {type: true}),
-              y: new Leaf(y, {type: true})
-            }
-          });
-        }
-
-        const box = new Leaf({
-              color: 'red'
-            },
-            {
-              branches: {
-                topLeft: point(0, 0),
-                bottomRight: point(1, 1)
-              },
-              actions: {
-                width(leaf) {
-                  return Math.abs(leaf.value.bottomRight.x - leaf.value.topLeft.x);
-                },
-                height(leaf) {
-                  return Math.abs(leaf.value.topLeft.y - leaf.value.bottomRight.y);
-                },
-                area(leaf) {
-                  return leaf.do.width() * leaf.do.height();
-                }
-              }
-            });
-
-        box.subscribe((value) => {
-          console.log('... is now', value);
-        });
-
-        box.do.setBottomRight({x: 50, y: 50});
-        console.log('box area:', box.do.area());
-
-/**
-      ... is now { color: 'red', topLeft: { x: 0, y: 0 }, bottomRight: { x: 1, y: 1 } }
-      ... is now {
-        color: 'red',
-        topLeft: { x: 0, y: 0 },
-        bottomRight: { x: 50, y: 50 }
-      }
-      box area: 2500
-*/
+console.log(history);
+// [0, 1, 2, 1, 3]
 
 ```
+Setting a forest's value to the same value it currently has will _not_ alert subscribers of a "false change."
+Objects are compared by reference AND `JSON.stringify(value)` value.
+
+
+<div style={{ background: 'lightYellow', padding: '1rem 2rem', marginTop: '2rem'}}>
+  **Version Notes**
+
+  This documentation is for Forest 2.0. Version 2.0 is a complete rebuild, and is not guaranteed to be
+  compatible with the functionality documented here.
+</div>

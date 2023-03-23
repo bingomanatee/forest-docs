@@ -1,0 +1,288 @@
+import BeatingUpOnRedux from "../../components/BeatingUpOnRedux";
+import CompTable from "../../components/CompTable";
+import Callout from "../../components/Callout";
+import systems from "../../source/systems.js";
+
+# Because, frankly, Redux is awful.
+
+Anyone who is used to using true databases to manage data will notice so much missing in the handling
+of state in React and Javascript in general.
+
+The highlight of what Redux not only doesn't do, but makes extremely difficult to do is:
+
+1. compositional logic
+2. data validation
+3. view-free testing
+4. transactional containment of change
+5. centralized terse configuration
+6. respect of modern observer patterns
+
+## The Spectrum of Data Management
+
+Let's look at a grab-bag of databases AND javascript stores.
+
+<CompTable cols={systems.cols} data={systems.data}/>
+
+Note how has the feature set increases, the performance (within its class) decreases; and of course, complexity
+goes up. In general the more complex (and slow) a system is, the more secure and stable it is and the easier it is
+to test -- because, its so complex, its really necessary to write tests for it, and the more often its put into
+critical use context.
+
+* Security is complex and slows operation
+* Schema/type control again, increases complexity and decreases performance
+* The more powerful a system is, the more limited the range of environments that support it
+* It is difficult to find top-tier feature sets outside of the server
+
+The last reason, sadly, is why so many have given up on client side control systems and use graphQL
+and backend systems to do all the heavy lifting. unfortunately, you really can't make a modern browser app
+without doing _some_ heavy lifting in the front end, and that is why Forest has tried to bring top tier
+controllability back to the client.
+
+## Tradeoffs
+
+The more carefully your data is managed, the more expensive it is to retain - both in update speed, money, and
+the cost to educate yourself as to how to participate and access it.
+
+Consider the evolution of travel What you gain in speed and commercial applications often comes at a cost
+of flexibility and overhead. Sometimes, your desire to go fast means you pay five dollars to take you and a multi-ton
+vehicle half a mile. (and if you have to park, it may take as much time to do this as it would to walk.)
+<BeatingUpOnRedux>
+  Redux is essentially, a data trebuchet. .. transports things over large distances at
+  high rates of speed. But there are good reasons why it was never used as a way to speed up your commute.
+</BeatingUpOnRedux>
+Speed as a singular criteria results in undesirable outcomes. What is important when transporting data is not just
+how far you go or how fast you get there: it is that you end up where you want to go, safely.
+
+Forest attempts to be more **editorial** about its data. It gives you "use when you need them" places to assert type
+control, and the ability to mix data and code into "OOP like" structures that let you write composable routines
+into your state and maintain an easily testable structure, with a very broad set of organizational mechanics (Sets,
+Maps, Objects, Arrays).
+
+## The editorial process
+
+Transporting information is about more than just throwing it over the wall: you have to qualify it, ensure that it meets
+all your business needs, and be concerned about how you plan on handing scenarios in which the data inserted in the system
+either doesn't meet your criteria or creates systemic problems. For instance, if your shipper requires containers to be
+under a specific weight and volume, when you design a container management system you have to not only consider whether
+individual items are too big or heavy; you have to consider whether the sum of their volume or weight is too much for
+a container. (And in some cases you may need to _model_ them in the container, in case you end up with "tetris" problems
+when it comes time to physically arrange your shipment.)
+
+Redux, and most state systems, not only do not allow you to add business constraints to their mutators, they do not
+create any provision for intelligently managing issues as they come up. For instance, if you add items one by one,
+you can easily reject the last item added if it is outside of your capacity.
+
+But what if you add six items and the last one fails?
+
+Well you're boned. Because actions are atomic and serial, there is no "back before I started" to go back to. AND --
+your view layer has ALREADY started to show the results of your previous adds, one by one. So, if you want to ensure
+process security, you are not going to get any help from the architectural assumptions of Redux.
+
+## Recovery
+
+Creating a system that lets you _reject_ problem actions _and_ lets you recover from the problems in an intelligent way
+is a **must have** criteria for an industrial strength state management system.
+
+* If things go south in your change _attempt_, the current scope should collapse, throwing an error upwards.
+* If no currently pending process catches the error, _every_ attempted change since the last **valid commit**
+  should be revoked.
+* the subscribers shouldn't get **any** notification to update/rerender, since there hasn't from their perspective, been
+  _any activity_.
+
+Conversely, after the outermost pending process has completed -- and any inner processes have completed -- and the
+current pending change(s) have been _validated and committed_: then and only then should subscribers get a fully
+updated broadcast of the new state. This assumes that at least one process actually _did_ something to the state,
+which is not necessarily true. (see "economy" below)
+
+I.e., if (from the outside) you add items to your cart one by one, they should be individually rejected. However,
+once this is true, you should be able to continue to add items, and the system should remain usable. I.e., if you are
+adding items to a one-meter crate and you add five oranges and a Buick, once the Buick is rejected, you should (a)
+still have the oranges in the crate and (b) still be able to add oranges.
+
+If on the other hand you add -- in one action -- five oranges, a Buick, and a Hippopotamus, unless you have a
+recovery handler that intelligently handles a failure, all the additions should be rejected _as a group_.
+
+This is known as `Atomic operations`. Atoms, in early Greek philosophy, were advanced as
+"the thing that the universe is made of that cannot be divided further into subcomponents."
+In computing, an Atomic operation is a change that must be either
+wholly accepted or wholly rejected as a single mutation of state.
+
+### Exotic Methodology
+
+<Callout>
+  Exotic methodology is using unusual techniques to perform routine tasks. Or using "Magic Side Effects" that
+  intercept activity in "sneaky" ways.
+</Callout>
+When Saga blunders in and tries to create more flow control around a Redux state, it radically increases the
+non-linearity of Redux and creates a lot of "Magical" behavior and interrupts. This of course is terrifying;
+its one of the ways that Ruby tends to balloon the unpredictability of its environment - it has so many interrupts and
+layers of convention that its easy for insidious behavior to slip in and act as a barrier to comprehension.
+
+It's not that Ruby developers complicate their apps to create a huge punishment to sacking them. Oddly enough
+the conventions exist in the name of "Enterprise development" so that it should be _easier_ to pick up where
+someone else left off.
+
+But the truth is that there is a kind of diffusion that is about more than just splitting work between files.
+It's about exotic methodology. Exotic methodology is using unusual techniques to perform routine tasks. Or using "Magic Side Effects" that
+intercept activity in "sneaky" ways.
+
+The "Event hooks" of Saga allow you to **intercept** and add side effects to activity that appears linear;
+that means that if you want to know exactly what happens in the execution of any given action, you must read
+**every saga hook** -- or you run the risk that a routine buried in the system does something that you just didn't
+understand.
+
+## Economy
+
+<Callout>
+Work outside the JavaScript runtime tend to be
+orders of magnitude slower than work contained
+in the computational environment of JavaScript
+</Callout>
+Economy means, don't alert the observers to change unless _there has been a change_. As mentioned above, that means,
+don't broadcast change inside anything bound to a transaction until they have been competed and the values validated.
+
+But it also means that just because transactions complete doesn't mean you necessarily have any actual changes to report!
+
+if your state is a simple number, say, and you call `myState.do.add(0)`, well, the value will not have changed in a way
+that is meaningful to the listeners. (wierd javascript-isms aside). Or, if your original state was `[1, 2, 3]` and
+your new state is a new _referentially unique_ array, `[1, 2, 3]`, should you tell your subscribers about this?
+
+**Definitely! (no?) (maybe?)**
+
+Forest is engineered only to broadcast changes that are **structurally unique** -- that is if the `JSON.stringify` version
+of the data is identical, then its **not considered a meaningful change** and is not broadcast.
+
+Why does this matter? Because state changes trigger activity in the DOM layer.
+Work outside the javascript layer tend to be orders of magnitude slower than work contained
+in the computational environment of JavaScript. That is why so much advanced work in React is devoted to
+not redoing work in the Dom that doesn't actually _change_ the dom.
+
+## Composition
+
+Composition of logic is the most fundamental trait of an organized system. When you set a property of an object,
+you actually are adjusting binary switches in memory, creating references, and in some cases,
+triggering the setter in the object's class definition.
+If it fails (and you catch an error) you do not, in general, have to worry about the entire object being erased.
+Specifically you can trust in confidence that the rest of the object
+is _in the state it was before you began a failed operation._
+
+Why is that important? Say you have a point that is a member of your state, and it has an ID.
+You have an operation `.offsetPoint(pointId, x, y, z)`. You are careless and don't enforce type constraints.
+`offsetPoint` calls `.setPointProperty(pointId, dimString, value)` three times for x, y, and z.
+
+Here's the catch: `.setPointProperty` _does_ care about type constraints, and if the value is not a number, it throws.
+If you don't have transactional containment, you could end up with the worst possible scenario: a _partial change_.
+i.e., you could offset the point's x and y properties, and _fail_ to offset z, which puts you in a very difficult
+situation which requires a lot of brittle code to recover from. You could of course manually cache the point
+before the operation and return the cached value on failure, but that kind of thing is what the state system should be
+doing on its own.
+
+So in the best case scenario, when setPointProperty detects a problem, it should return the system to the state it was
+_before it began any changes_. And then of course, it should throw, which if it was _itself_ composed, would alert its
+parent context that "Things got fucked up" -- and the parent context could either intelligently react to the problem or
+in the worst case, itself, throw up to the parent context.
+
+For instance, if you have a rectangle made of two points and you `offsetPoint` the lowerLeft corner and the `offsetPoint`
+operation failed when offsetting the upperRight corner (perhaps because the rect had to be contained within another rect)
+, in the `offsetRect` parent class, after an error is thrown, you would be confident that both the lowerLeft and upper right
+points were the same points that they were before the operation.
+
+This is done by establishing changes in **benchmarks** and **stable checkpoints.** Each checkpoint is trusted to have
+fully passed all validation checks. You then assert a set of changes; each change may be validated _locally_ but just before
+an entire system of change benchmarks are accepted there may be a _global_ last minute sanity check that is aware of
+more context.
+
+**This is why TypeScript alone can never replace the entire functionality of a robust state management system.***
+
+## View free testing
+
+A state system shouldn't be tightly welded into any single view management system. There are several reasons for this:
+
+* It shouldn't have to be re-engineered if the view code is updated
+* It should be flexible enough to be used in more than one view system -- or even on the back end
+* It should be usable globally as a top down data container, or _locally_ as a tactical process manager
+* The entire state shouldn't (always) evaporate if a view component is removed or re-instantiated
+* Unit tests run a lot faster if the business logic can test scenarios without instantiating and processing views
+* The state system shouldn't have to be reengineered just because the view code got tweaked
+* Useful parts of the state system should be reusable outside their original view context
+
+Honestly the "testing" reason which may seem like a tossaway item -- is _really important_. Not only do headless
+tests run faster, they are a lot easier to read and write than view-centric tests, and result in far better business
+systems than code that is sewn and scattered across multiple views.
+
+Further, when things go south, you can go _straight to the business logic_ and test scenarios and code that matters
+instead of having to drag your values through the interface.
+
+## Compact, readable configuration
+
+<BeatingUpOnRedux>
+It's hard to think of a more unreadable more bloated system than Redux.
+...when you make code that hard to read, it not only takes far longer
+to write than you need to,
+but it makes it easy to miss logic errors and hard to track them down.
+</BeatingUpOnRedux>
+
+The absence of compositional methods makes for a _lot_ of boilerplate in your actions.
+And in general, it reflects a religious fervor to use functional theology at the expense of good engineering.
+
+State systems should have a clean centralized definition of the data, and the actions you can take on that data.
+Scripting a state system should be fast; and all the code that matters to state should be concentrated in one definition
+file (not several) and be easy to scan and amend.
+
+## Don't panic
+
+Type filtering should be clean and flexible, and instead of rejecting things left and right, you should have the
+opportunity to fix "bad" data. If data is submitted without required properties, and those properties have
+sensible defaults, its better to fix the data than to panic throw a type violation. Similarly, it's better to
+clean out whitespace padding then to throw an error on a failed regex or to write overly elaborate regexes that
+expect filthy data.
+
+Establishing a consistent and healthy pipeline should be a multi-stage operation that has multiple points of
+safety, built in to the system's configuration:
+
+* take in changes
+* filter and clean data (when possible)
+* if the change is a "noop" -- reasserting the same data -- quietly abort your process
+* assert the changed data in a reversible manner
+* validate the changes tactically
+* assert change up the tree and validate at each stage to allow for strategic validation
+* when a tree of operations has successfully completed and passed all your checks
+- bless all change assertions into permanent state
+- clean out your history of benchmarks
+- broadcast updates to all subscribers
+
+## Respect your audience
+
+Your audience doesn't need to be notified of change until a complete set of operations has been validated.
+They especially don't need to be notified if at the end of the day there weren't any real changes.
+
+If you take your car into the shop, you don't expect to be told that they ordered parts, or that they are calling
+a mechanic in from another shop to work on your car, or that they had to reorder parts because the ones they got
+are for an earlier model. You don't need to know that a week later, they cleaned out your carburetor and now your
+car is working fine. (you especially don't need to be billed for the carburetor they ordered and then returned because
+they ended up just fixing yours.)
+
+You only want one call from your mechanic: "We fixed your car, and it's fine now."
+
+This is especially important when using composed actions -- you only want to know when the root action is complete:
+and in fact, only if it in fact changed your state.
+
+For instance there are actually several flavors of actions that are fundamental tools of a useful state system:
+
+* **selectors** reinterpret your data, summarizing or filtering it, to return a "virtual" interpretation of your data. \
+You can also call them reducers.
+* **mutators** change your data in some regards.
+* **triggers** do something external to your state system; they may send it to a network endpoint, change the view, \
+or do something else that isn't directly related to your state.
+* **observers** listen for changes in (part of) your state and do something when those things change.
+
+
+The subscribers to the entire state tree are actually a specific form of observers - one with no filter.
+But you _should_ only trigger observers when a complete validated structural change has occurred. I.e., when
+you call `state.getUser(100)`) that "action" shouldn't trigger any observers. Similarly, `state.setUserId(100)`
+shouldn't trigger observers if the user id was already 100 before your call.
+
+This is not possible if you (a) don't allow for composable actions or (b) every action on your state system is a
+"blind" operation that you don't manage in an intelligent way -- part of which means, separating structurally the
+broadcast mechanic from the action mechanic.
+

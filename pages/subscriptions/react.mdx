@@ -1,0 +1,154 @@
+import { CounterComponent } from "../../components/examples/subscription/Counter"
+
+# Binding to Subscriptions in React
+
+In general, the `.subsribe` system can be used in the same manner as any RxJS observable, in Angular or any other system.
+
+React of course is special; to bind Forests to React you use hooks.
+This is true whether the state is _externally generated_ or _local_.
+
+## Local states
+
+You can easily do local state generation in a component. You then do "unsubscribing" as the "response" of the hook
+to eliminate memory leaks.
+
+```javascript
+export const CounterComponent = () => {
+  // value will be a copy of state.value, immerized.
+  // exporting a state's value to a useState property
+  // ensures the component re-renders when the state changes
+  const [value, setValue] = useState(0);
+
+  // state will be an instance of Forest.
+  const state = useMemo(() => {
+    return new Forest({
+      $value: 0, actions: {
+        increase(leaf) {
+          leaf.value = leaf.value + 1;
+        }
+      }});
+  }, []);
+
+  useEffect(() => {
+    const sub = state.subscribe(setValue);
+    // when the document is done,
+    // unsubscribing should prevent
+    // unnecessary memory leaks
+    return () => sub.unsubscribe();
+  }, [state, setValue]);
+
+  return (
+    <div className={styles['counter']}>
+      Count: {value} <button type="button" onClick={state.do.increase}>Add</button>
+    </div>
+  )
+}
+```
+
+Here it is, in action:
+
+<CounterComponent />
+
+This may seem like an inconvenient amount of work to just listen to a single numeric change -- but the work
+to listen to a forest doesn't change _no matter how large the Forest instance grows_,
+or how many actions you write in it.
+
+## Global Stores
+
+Remote / global states are even easier; they can be exported and shared wherever you like.
+With global states its even more important to kill off subscribers when components go out of scope.
+Also, you may find using contexts to share subscribed values just as effective.
+
+You can have more than one global store if you wish; i.e., one for user, one for cart, one for
+product catalog, etc.
+
+```javascript
+
+import userState from './user/state'; // a shared Forest instance
+
+export const UserPanel = () => {
+  // pushing subscription to local state hooks
+  // ensures the component re-renders when the state changes
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+    const sub = userState.subscribe(setValue);
+    // when the document is done, unsubscribing should prevent
+    // unnecessary memory leaks
+    return () => sub.unsubscribe();
+  }, [state, setValue]);
+
+  return (
+    <div>
+      User: {value.username} <button type="button" onClick={userState.do.logout} />
+    </div>
+  )
+}
+
+```
+
+"why bother with Forest if we are just leaning on hooks anyway?" Hooks allow us to update our view every time our
+state publishes a new value. By bundling (and potentially, expanding locally) our state in a single token, we can
+move the state code to a self-contained testable unit, and avoid losing testability in closure, a huge cost of hooks.
+We also don't have to write hordes of setters for each property - they automatically get exposed through the forest's
+`do` property.
+
+All these examples are as small as possible to emphasize the binding between Forest and React. The economy comes as
+you define vastly larger state ecosystems.
+
+## Exposing stores through context
+
+You can use context for transporting global store value down the site:
+
+```javascript
+
+import userState from './user/state'; // userState is a shared Forest instance
+
+export const UserContext = react.createContext({});
+
+export const UserProvider = ({children}) => {
+  // pushing subscription to local state hooks
+  // ensures the component re-renders when the state changes
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+    const sub = userState.subscribe(setValue);
+    // when the document is done, unsubscribing should prevent
+    // unnecessary memory leaks
+    return () => sub.unsubscribe();
+  }, [state, setValue]);
+
+  return (
+    <UserContext.Provider value={{userState, value}}>
+      {children}
+    </UserContext.Provider>
+  )
+}
+
+```
+
+Both the state and its value are imported directly from context, so that subscribers can call actions on the
+userState; this makes for easier local testing on components if you want to mock out the state.
+
+## A note on references
+
+In general any state that comes out of a Forest/Leaf instance's value will be unique every time its value is changed -
+that includes if a value deep in a sub-sub-object is changed (because, Immer).
+
+Actions, i.e., `myLeaf.do.____` is going to stay the same from render to render,
+as if it had been produced by `useCallback`. Unless you _actively_ change a leaf's actions via `.updateDo(true)`; and
+even then, only the setter actions will vary from render cycle to render cycle.
+
+So, if you want to add an event handler (i.e., a listener for a click event or a form update or whatever)
+to listen to the dom, make it an action and pull out the event's value inside
+your forest, and you'll never have to use `useCallback` again.
+
+## Injecting Params into State
+
+There are two (good) ways to inject local state into params:
+
+1. on creation, in the `useMemo` function
+2. Through observation, in a `useEffect` hook
+3. The not good way, in the body of the render function
+
+If you do 3., you may cause excessive re-renders

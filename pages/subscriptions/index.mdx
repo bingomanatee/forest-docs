@@ -1,0 +1,236 @@
+import { CounterComponent } from "../../components/examples/subscription/Counter"
+
+# Subscriptions
+
+Subscriptions are exposed only on Forests; you cannot at this point subscribe to leaf values.
+They follow the Rxjs Subscription pattern.
+
+`myForest.subscribe(onChange)` can be passed a function -- 99% of the time that is fine. But it also
+accepts the more complex `{next(value){...}, error(err){..}, complete() {}}` form that is part of the
+RxJS API.
+
+## The tempo of subscription
+
+Subscriptions are as quiet as possible:
+
+* A subscription only emits when _all transactions have completed_
+* Errors that occur in a transactional scoped activity will cause cascading failures, ultimately resetting the forest
+and its Leaf intstances, to the last committed state, and will _not_ emit to subscribers
+* Trapped errors (that is, trapped within the body of an action method) will rollback anything they attempted to do,
+but the changes before and after the try/catch code _will_ eventually be sent to subscribers
+* Changes that do not change the _real value_ of a Forest will not be emitted.
+(replacing an array with an array with the same contents, for instance)
+
+All this is to say, Subscriptions tell you about things that have been done to your forest, as soon as those things
+have been determined to be _good things_. Because Forest was coded by a man, it has a fear of commitment; that is,
+it isn't going to commit values until all of those values have been validated, and if it fails, its going to throw
+all the pending changes into the garbage and quietly storm off.
+
+## Temporary subscriptions
+
+the `.subscribe()` method actually does return a thing: it's a [Subscription](https://rxjs.dev/guide/subscription) instance,
+and you can stop listening through the `.unsubscribe()` method of it.
+
+more than one listener can subscribe to the same Forest, and they can leave when they have had enough.
+
+```javascript
+
+const { Forest } = require('@wonderlandlabs/forest')
+const _ = require('lodash')
+
+const WANT_SEX = 'Want to have some sex?'
+const I_LIKE_BEER = 'I like beer'
+
+const WOMAN_THOUGHTS = [
+  'Its a good day today',
+  'How do you feel',
+  'Do you like this weather?',
+  'I like [generic movie star]',
+  'Lets Go Shopping',
+  'I want to go to the beach',
+  'Lets go for a walk in the park'
+]
+
+const WOMAN_RESPONSES = new Map([
+  [WANT_SEX, [{ phrase: 'Not right now' }, { phrase: 'Get fucked', stopSpeaking: true }]]
+])
+
+const MAN_THOUGHTS = [
+  I_LIKE_BEER,
+  'I think I am awesome',
+  'I think I am awesome',
+  'You are pretty',
+  'I like [generic sports team]',
+  'Monster trucks are cool',
+  WANT_SEX,
+]
+
+const MAN_RESPONSES = new Map([
+  [/ go /i, ["I'm tired", "That's too far", "I'm too drunk"]]
+])
+
+function any(list) {
+  return _.shuffle(list)[0]
+}
+
+const speakerFactory = (name, thoughts, responses = new Map()) => {
+  return {
+    $value: {
+      name,
+      speaking: true
+    },
+    actions: {
+      sayThought: (leaf, thought) => {
+        // if no parameter, say a thing not related to other persons speech
+        if (!thought || (leaf.parent.value.phrase === thought)) {
+          thought = any(thoughts)
+        }
+        leaf.parent.do.say(thought, leaf.value.name)
+      },
+      chooseResponse(leaf, options) {
+        const response = any(options)
+        if (!response) {
+          return
+        }
+        const { phrase, stopSpeaking } = (typeof response === 'string' ? { phrase: response } : response)
+        if (phrase) {
+          leaf.do.sayThought(phrase)
+        }
+        if (stopSpeaking) {
+          leaf.do.set_speaking(false)
+        }
+      },
+      respond(leaf, phrase, speaker) {
+        if (!phrase) {
+          return
+        }
+        if (leaf.value.name === speaker) {
+          return
+        }
+        let options
+        if (responses.has(phrase)) {
+          options = responses.get(phrase)
+        } else {
+          responses.forEach((rOptions, key) => {
+            if (!options && key instanceof RegExp) {
+              if (key.test(phrase)) {
+                options = rOptions
+              }
+            }
+          })
+        }
+
+        if (options) {
+          leaf.do.chooseResponse(options)
+        }
+      },
+      listenToConvo(leaf) {
+        const sub = leaf.subscribe(({ phrase, speaker }) => {
+          if (!leaf.value.speaking) {
+            console.log(leaf.value.name, 'stopped listening to conversation....');
+            sub.unsubscribe();
+            return;
+          }
+          if (speaker === leaf.value.name) {
+            return // don't respond to yourself
+          }
+          setTimeout(() => leaf.do.respond(phrase, speaker))
+        });
+      }
+    }
+  }
+}
+
+const convo = new Forest({
+  $value: { phrase: '', time: Date.now(), speaker: '', awkward: 0 },
+  children: {
+    man: speakerFactory('Man', MAN_THOUGHTS, MAN_RESPONSES),
+    woman: speakerFactory('Woman', WOMAN_THOUGHTS, WOMAN_RESPONSES)
+  },
+  actions: {
+    silence(leaf) { // "awkward silence".
+      leaf.do.set_awkward(leaf.value.awkward + 1)
+    },
+    say(leaf, phrase, speaker) {
+      if (speaker === leaf.value.speaker) {
+        // increase awkwardness if the same person speaks over and over
+        leaf.value = { phrase, speaker, awkward: leaf.value.awkward + 1 }
+      } else {
+        // reset awkwardness if a different person speaks
+        leaf.value = { phrase, speaker, awkward: 0 }
+      }
+    }
+  }
+})
+
+convo.child('man').do.listenToConvo()
+convo.child('woman').do.listenToConvo()
+
+// prompt speech that is NOT responses to the other person;
+
+const nonSequitor = () => {
+  const speakerID = any(['man', 'woman'])
+  const person = convo.child(speakerID)
+  if (!(person.value.speaking)) {
+    convo.do.silence()
+  } else {
+    person.do.sayThought()
+  }
+
+  if (convo.value.awkward > 6) {
+    console.log('<awkward silence kills conversation>')
+    clearInterval(interval)
+  }
+}
+
+const interval = setInterval(nonSequitor, 500)
+let lastPhrase = ''
+convo.subscribe(({ phrase, speaker }) => {
+  if (phrase === lastPhrase) {
+    /* because this subscription listen to ANY updates,
+      not just speech, only describe distinct sentences.
+Could also be done with `.select()` focus on speech.
+     */
+    return
+  }
+  if (phrase) {
+    console.log(speaker, 'said', phrase)
+  } else {
+    setTimeout(() => convo.do.silence())
+  }
+  lastPhrase = phrase;
+})
+
+/*
+
+Man said I think I am awesome
+Woman said Lets Go Shopping
+Man said That's too far
+Man said Monster trucks are cool
+Woman said Lets go for a walk in the park
+Man said I'm tired
+Woman said How do you feel
+Woman said I like [generic movie star]
+Woman said Lets Go Shopping
+Man said I'm tired
+Man said I think I am awesome
+Man said Monster trucks are cool
+Man said Want to have some sex?
+Woman stopped listening to conversation....
+Woman said Get fucked
+Man said I like beer
+Man said I think I am awesome
+Man said I like [generic sports team]
+Man said I think I am awesome
+<awkward silence kills conversation>
+
+ */
+```
+
+Note - this system does a thing that is _not_ a healthy production pattern; the state listens to itself, and generates
+change based on its own value, which is potentially a recipe for an infinite loop. (another version of this code
+had "man bots" and "woman bots" but it got too bulky).
+
+The point here is that the "man child" and "woman child" both listen to the conversation (and react to the other person's
+speech) until the woman gets pissed off and kills off her subscription. In a chat type environment you could have
+multiple systems subscribing and unsubscribing to your state.

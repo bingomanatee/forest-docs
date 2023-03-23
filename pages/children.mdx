@@ -1,0 +1,100 @@
+import Callout from '../components/Callout';
+
+# Child Leafs
+
+Forest instances are in fact, Leaf instances -- they are the "root" of the Leaf ecosystem. They can be enhanced
+with Children to manage specific properties of the root.
+
+While many systems can (and should) be created without child Leaf instances, in some cases it is useful to
+transport the actions and value(s) of part of the state into an independent "child" that you attach to the root
+(or other Leaf instance).
+
+## Why do you need/want children
+
+Symptoms that you may find child Leaf instances useful are:
+
+* You have several actions which largely or completely concern themselves with a branch of the parent/root
+* You often want to subscribe to a branch of the state system
+* You want to enforce the same type/filter/test constraints on a series of properties
+
+A classic example, as shown in the [home page](/index) is modelling fields. Every form field has potentially a value
+and an error message. In fact, they also have labels, and in some cases options, min, max, inputType, or whatever.
+
+## Parent qualifications
+
+Child leaves are only useful for Leaf instances whose values is of type 'object' or 'map'. Once you have added children
+you should not _change the value of the leaf_ to something that is not of that type; its advised to set `{type: true}`
+(or `type: 'object'`) in the config of any leaf you intend to use as the parent of child leafs.
+
+## WHEN should you create children
+
+At the moment, children are conceived to be static elements of a state tree, created in the constructor. Future
+releases will have more dynamic parent/child structures, collections, and joins, but the current codebase is not tested
+around dynamic children.
+
+That being said, there is an `.addChild(<Leaf or leaf config or raw value>, key)` method in the Leaf class which you
+can use to after-the-fact bind new data into an existing leaf.
+
+## Conflicts between local values and child values
+
+You can create a Leaf whose value (in the `.$value` property) conflicts with the value of an item in the `.children` pojo.
+In all such cases, the child leaf value will express itself over the local value, to subscribers. it is _quite possible_
+that in some circumstances the local value will have _incorrect_ (ignored) values for a field that is governed by a child.
+
+When you _set_ a leaf's value with a new value, and that value has fields that are managed by a child, the newly submitted
+value should be sent upwards and _overwrite_ the child leaf's entire value.
+
+## adding and removing children
+
+You can -- carefully -- add and remove children through the `leaf.addChild(key, valueOrLeafConfig)` method and the
+`leaf.removeChild(key)` methods. Again, this is not thoroughly tested and is not how leaf was designed to operate --
+adding and removing children is outside the transactional capacity of Forest to manage, but it can be done.
+
+## Child leaf setter actions
+
+Child Leaf instances can be set by auto-created setters from the `.do` property. This is true not only for the
+root leaf, but for any child node within the structure:
+
+```javascript
+
+const rect = new Forest({
+  $value: {}, children: {
+    ul: { $value: { x: 0, y: 0 } },
+    br: {
+      $value: {}, children: {
+        x: { $value: 10 },
+        y: { $value: 10 }
+      }
+    }
+  }
+})
+
+rect.subscribe(console.log)
+
+rect.do.set_ul({ x: -10, y: -10 })
+rect.do.set_br({ x: 10, y: 30 })
+rect.child('br').child('y').value = 50
+
+/*
+
+{ ul: { x: 0, y: 0 }, br: { x: 10, y: 10 } }
+{ ul: { x: -10, y: -10 }, br: { x: 10, y: 10 } }
+{ ul: { x: -10, y: -10 }, br: { x: 10, y: 30 } }
+
+ */
+
+```
+
+Child leaves should only have one parent and should not be defined as the children for more than one
+parent leaf.
+
+## Effects of changing leaf and child values
+
+Setting a new value for a leaf will change the child values of any children for which the new values
+have keys. If you set the value of a child leaf directly, it will update its' parent, which will have a chain
+reaction up the tree until the root leaf is updated as well.
+
+Any validation/type errors encountered in this process will revoke _all_ the changes, including the attempt
+to set the child directly. There may also be other changes rolled back as well, depending on the context,
+if the thrown error is not trapped.
+

@@ -1,0 +1,59 @@
+# Release Notes
+
+## Major Version Development Notes
+
+### Version 1.x
+
+Version 1.x has a significantly different API, documented [here](https://forest-docs.vercel.app/). It has been
+**Thoroughly tested** across several projects and is recommended for those who want a stable secure platform
+for production websites.
+
+### Version 2.0
+
+Version 2.0 was re-developed from the ground up. It is more lightweight and its sub-components are better factored
+and documented. Specifically:
+
+* The **type sensing** inspection library was moved into `@wonderlandlabs/walrus`
+* The **transaction management** system was extracted into `@wonderlandlabs/transact`
+* the **universal component access** system was exposed as `@wonderlandlabs/collect` (which also uses walrus).
+
+Not only did this significantly reduce the footprint of the code in Forest itself, but it allowed for more
+robust testing of internal components. Splitting up Forest also made the cognitive load of the codebase much lower,
+as the anatomy of its ecosystems now has clear boundaries and specialist handlers for the more involved tasks
+it requires.
+
+## Roadmap
+
+Right now Forest instances have a hierarchy that is fixed on creation for the most part. This makes some things
+relatively simple but doesn't allow for a more dynamic ecosystem. Future releases will address this:
+
+### Dynamic Children
+
+The addition of children is **not** managed transactionally (thus the discouraging of dynamic child addition in
+the current codebase). This will, hopefully, be added in future releases, with "join Leafs" allowing for child
+addition/creation being subject to rollback. this means also, that leaves will be deletable -- transitionally,
+so you can "roll back deletions" if transactions fail.
+
+## Collections
+
+The hierarchical anatomy of leaves preempts some graph-based operations,
+and that will be addressable with a collection.
+A collection will be a leaf containing IDs of other leaves, that can be updated transitionally.
+Other leaves can then join or pick leaves out of a collection leaf by specifying a selector
+that filters the collection to the joined element.
+
+This will make modelling concepts like shopping carts easier.
+You can create a leaf that contains a collection of product ids
+as a child, and those ids can then dynamically expand to product Leaf instances.
+Moving from a hierarchy based configuration to a graph-based configuration
+will allow for modelling many real-world scenarios.
+
+To make this work at scale, some preprocessing/indexing will allow for more rapid access and traversal
+of larger collections.
+
+## Query Syntax
+
+The ability to model selections and mutations as objects allows for easily preprocessed selection and mutation actions.
+In combination with `@wonderlandlabs/collect`, you can easily perform operations across a collection, or to a leaf,
+can bring some of the power of graphQL's patterns to Forest.
+
