@@ -1,0 +1,40 @@
+# Using Leaf with React
+
+Leaf was designed to be used with React, as was shown in the getting started examples. There are two ways to
+use Leaf in react:
+
+1. **locally** -- as shown in the [getting started](/get-started) examples, you can use useState/useEffect to
+  generate a Leaf instance, and pass it (and/or its values) downwards as needed.
+2. **globally** -- a leaf can be expressed as a module, that can be accessed from anywhere in your application.
+  You can use a root subscriber component to send its values to any downstream components, but there is no reason
+  to use properties to access the leaf itself or its methods; you can pull that in from the module system directly.
+
+The latter case is a useful system for, for instance, user login management.
+
+```jsx
+import userLeaf from './userLeaf';
+
+export const App = () => {
+  import React, {useState, useEffect} from 'react';
+
+  const UserContext = React.createContext(userLeaf.value);
+
+  function App() {
+    const [userData, setUserData] = useState(userLeaf.value);
+    useEffect(() => {
+      const sub = userLeaf.subscribe(setUserData);
+      return () => sub.unsubscribe();
+    }, []);
+    return (
+      <UserContext.Provider value={userData}>
+        <Content />
+      </UserContext.Provider>
+    );
+  };
+}
+
+```
+
+You can also provide the *entire leaf* out of context a la `sub = userLeaf.subscribe((value) => setUserData({value, userLeaf}));`.
+note don't send leaf directly out of a context as it doesn't change over time from a referential point of view.
+

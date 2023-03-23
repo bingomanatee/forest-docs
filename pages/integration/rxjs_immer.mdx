@@ -1,0 +1,38 @@
+---
+title: RxJS & Immer
+---
+## RxJS
+
+Leaf uses, and is intended to work compatibly with, Rxjs. Although a leaf is not a Rxjs class,
+it has a Subject signature with the following methods/properties modelled after a BehaviorSubject:
+
+* `next(value)`
+* `subscribe(listener)` - delegates to an actual subject listener
+* `complete()` - freezes a leaf's update.
+* `isStopped` - true after complete.
+* `value` -- the current value of the leaf
+* `pipe` -- delegates to BehaviorSubject.pipe(1)
+
+One noticeable difference between Leaf and Subjects is that with `next()`; what goes in is not necessarily what
+comes out to subscribers. Compound values sent to next()  are *blended*, a la React's setState, with the current value
+so you can use partial values to update objects and maps.
+
+Also, (hopefully,) errors in next or actions throw, but do NOT terminate the leaf, instead, rolling back changes
+to the previous state with no subscriber notification.
+
+
+# Immer: `LeafImmer`
+
+Leaf is tightly coupled with [Immer](https://immerjs.github.io/immer/) in a variant class, `LeafImmer`.
+LeafImmer is identical to the base Leaf class as far as APIs go;
+however, it uses immer objects as values for compound data, making them immutable. As such,
+it has a slightly narrower value constraint - you can only use immerable values for it.
+
+LeafImmer instances *can* be used as branches for Leaf parents;
+however it's not recommended to use anything but LeafImmer instances for LeafImmer branches.
+
+------------
+
+(1) the subject piped out will *not* include selectors. `myLeaf.subscribe(listener)` actually listens to a pipe of the
+root subject, which you will be piping from if you call `myLeaf.pipe(....)`. If you must include selectors, call
+`myLeaf.subject.pipe(...)`.

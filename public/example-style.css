@@ -81,3 +81,10 @@
 .login-box .center {
     text-align: center;
 }
+
+.callout {
+    border: 3px solid darkgray;
+    padding: 1em;
+    margin-top: 1em;
+    margin-bottom: 1em;
+}

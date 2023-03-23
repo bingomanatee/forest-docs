@@ -1,0 +1,114 @@
+---
+title: Subscription
+---
+
+# Subscription
+
+Leaf's follow RxJS' Observable pattern; you subscribe to their value and receive updates via the listener:
+
+```javascript
+const numLeaf = new Leaf(6);
+numLeaf.next(7);
+const sub = numLeaf.subscribe((value) => console.log('number is now', value));
+numLeaf.next(8);
+numLeaf.next(9);
+numLeaf.next(10);
+sub.unsubscribe();
+numLeaf.next(11);
+numLeaf.next(12);
+
+/**
+'number is now', 7
+'number is now', 8
+'number is now', 9
+'number is now', 10
+*/
+```
+
+Subscribe returns a Subscriber which can be deactivated with `.unsubscrube()`, as shown above.
+
+`subscribe(listener)` also accepts the tri-fold listener as it is a delegation to an 'Rxjs Subject`:
+
+```javascript
+
+myLeaf.subscribe({
+  next(value) {
+    console.log(value);
+  },
+  complete() {
+    console.log('done')
+  }
+});
+
+```
+
+## Transactions
+
+All actions and updates are contained within **transactions**. Transactional activity muffles notification to
+subscribers. so, for instance, you can write an action and call three or four `myLeaf.setX(2); myLeaf.setY(3)` calls,
+and only one update will be emitted.
+
+Even though the changes are actually occurring synchronously, and parent leafs are getting updated, you won't see change in
+a listener until the outermost transaction completes.
+
+If you were to do that *outside* an action, several updates will be broadcast. Also, any activity in a transaction with a
+thrown error is flushed *completely* including changes that occurred before the error.
+
+```javascript
+
+    const leaf = new Leaf(
+      {
+        x: 0,
+        y: 0,
+        z: 0,
+      },
+      {
+        actions: {
+          updateAll(leaf, x, y, z) {
+            leaf.do.setX(x);
+            leaf.do.setY(y);
+            console.log('leafs y is now ', leaf.value.y);
+            leaf.do.setZ(z);
+            if (typeof y !== 'number') throw new Error('why?');
+          },
+        },
+      }
+    );
+
+    leaf.subscribe(value => console.log(value));
+
+    leaf.do.setX(1);
+    leaf.do.setY(2);
+    leaf.do.setZ(3);
+
+    leaf.do.updateAll(4, 5, 6);
+    console.log('---- bad value ----')
+    try {
+      leaf.do.updateAll(7, '8', 9);
+    } catch (err) {
+      console.log('error:', err);
+    }
+    console.log('current value of leaf: ', leaf.value);
+
+/**
+{ x: 0, y: 0, z: 0 }
+{ x: 1, y: 0, z: 0 }
+{ x: 1, y: 2, z: 0 }
+{ x: 1, y: 2, z: 3 }
+leafs y is now  5
+{ x: 4, y: 5, z: 6 }
+---- bad value ----
+leafs y is now  8
+error: Error: why? ...
+...
+current value of leaf:  { x: 4, y: 5, z: 6 }
+*/
+```
+
+The same code in action `updateAll()` causes a single update where, if called outside an action, it is three
+distinct updates. also even though inside the updateAll leaf is changed to '8', the error thrown *after* all the
+values have been 'changed' revert. This is because each leaf is *journaled* for changes, which are reset to the starting
+version on any thrown error.
+
+You can manually work inside a transaction by calling `leaf.transact(() => {...})`, but it's easier to just write an
+action that does this implicitly.
