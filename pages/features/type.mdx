@@ -112,11 +112,11 @@ allow the value to pass.
 There is no guaranteed order of execution of tests.
 
 Test functions are passed a Change instance that has the following signature:
-```{
+```
   target : (your leaf)
   value: (your submitted change)
   next: (a blend of your change and the current value -- or in simpler types, will be identical to value)
-}```
+```
 
 Do not attempt to change the value or the target leaf in any way inside a test.
 
