@@ -5,27 +5,21 @@ title: Configuration options
 
 ## Options
 
-The second property of Leaf can be an object with any/all/none of these properties:
+The Forest constructor parameter can be an object with any/all/none of these properties:
 
-* **name** - an identifier for the leaf. set/overridden for Leaf
-  instances made/passed into `.branch(name, value)`
+* **value** - the initial value of the Forest. (required)
+* **name** - an identifier for the Forest.
 * **test** - a function; will be passed each change, as it is asserted;
   if it returns anything "truthy" (not zero, null, etc), or it throws, will block the updating of a Leaf.
 * **actions** - an object of name/function accessible off the `.do` object property of your Leaf.
 * **selectors** - a collection of named functions that resolve on each update to return summation of the current value.
-* **branches** - an object (or map) of name/branch ( Leaf instances) pairs.
+* **children** - an object (or map) of name/branch ( Leaf instances) pairs.
 * **type** - if true, then rejects any values that don't match the type (string, number, etc.)
-  of the initial value; Also takes one of the type flags:
-  - TYPE_STRING
-  - TYPE_NUMBER
-  - TYPE_DATE
-  - FORM_MAP
-  - FORM_OBJECT
-  - FORM_ARRAY
-  - FORM_FUNCTION
-  - an array of acceptable types.
-* **any** if true, disables ALL type / form checking.
-* **debug** - a boolean that if true, will echo extended data; used to develop Leaf code.
-* **setters** - boolean, or 'all'; whether to create set[field] actions in the leaf. By default, branches do not
-  have setter actions; set root leaf's setters options to 'all' to activate branch actions, or set individual
-  branch 'setters' option to true to selectively activate them.
+  of the initial value; alternately, takes one of the type describers:
+  - 'string'
+  - 'number'
+  - 'map'
+  - 'object'
+  - 'array'
+  - 'function'
+  - an array of acceptable types; e.g., ['string', 'number']

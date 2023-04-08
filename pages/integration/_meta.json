@@ -1,5 +1,5 @@
 {
  "with_react": "With React",
- "rxjs_immer": "Rxjs and Immer integration",
+ "rxjs": "Rxjs and Immer integration",
  "testing" : "Testing Leafs"
 }

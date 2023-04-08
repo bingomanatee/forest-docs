@@ -5,38 +5,44 @@ title: Value and Next
 # Leaf's Value
 
 There are no limitations on the Leaf's value - the first argument of the leaf. A leaf's value can be an object, a map,
-a string, number, Date, array, or whatever.
+a string, number, Date, array, or any other Javascript variable type.
 
 <div className="callout">
-Objects and Maps will get cloned every time one of their values change; so it's not a good idea to use an object that
-relies on its prototype for meaning; for instance putting a DOM object into a Leaf is probably going to be problematic.
+  Objects and Maps will get cloned every time one of their values change; so it's not a good idea to use an object that
+  relies on its prototype for meaning; for instance putting a DOM object into a Leaf is probably going to be
+  problematic.
+  see `setMeta` for how to attach complex objects to a state.
 </div>
+
+## Compound Values
 
 Objects, maps, and arrays are considered **compound** values;
 they will(1) get setters inferred for their values in the `.do` method collection.
 
-A leaf's current value is accessed from the `myLeaf.value` property. Do not alter that property directly; use [actions](/features/actions) or `next(newValue)`;
+A leaf's current value is accessed from the `myLeaf.value` property.
+You can get or set that value directly to update state:
 
 ```javascript
 
-const numberLeaf = new Leaf(6);
-const stringLeaf = new Leaf('Bob');
-const objectLeaf = new Leaf({x: 0, y: 0});
-const mapLeaf = new Leaf(new Map([
-  ['x', 0],
-  ['y', 0]
-]));
+const numberLeaf = new Forest(${value: 6});
+const stringLeaf = new Forest(${value: 'Bob'});
+const objectLeaf = new Forest({$value: {x: 0, y: 0}});
+const mapLeaf = new Forest({$value: new Map([
+    ['x', 0],
+    ['y', 0]
+  ])
+});
 
-numberLeaf.next(10);
+numberLeaf.value = 10;
 console.log('new number leaf value:', numberLeaf.value);
 
-stringLeaf.next('Rick');
+stringLeaf.value = 'Rick'
 console.log('new string leaf value: ', stringLeaf.value);
 
-objectLeaf.next({y: 3, z: 6});
+objectLeaf.value = {y: 3, z: 6};
 console.log('new object leaf value', objectLeaf.value);
 
-mapLeaf.next(new Map([['y', 3], ['z', 6]]));
+mapLeaf.value =new Map([['y', 3], ['z', 6]]);
 console.log('new map leaf value', mapLeaf.value);
 
 /**
@@ -48,66 +54,19 @@ console.log('new map leaf value', mapLeaf.value);
 
 ```
 
-## `next(value)` - changing the value wholesale
-
-You can update the entire leaf's value with `myInstance.next(newValue)`. For simple values (strings, text, etc.) the
-new entry will simply replace the last one. for **compound** values the new fields will be "blended" into the existing
-collection. i.e., it will add new properties or update the old ones, but you will never lose properties/map keys
-with a next call.
-
-Next, like all of Leaf code, is *synchronous*. Its effects happen immediately after it is called, and is reflected
-in `myLeaf.value` and sent out to any [subscribers](/features/subscription) immediately. So, for instance,
-inside [actions](/features/actions) you can get the current value of a leaf directly from leaf.value right after
-you call `next` (or a setField action, or another action that changes the leaf):
-
-```javascript
-     const fibo = new Leaf([1, 2], {
-        actions: {
-          nextValue(leaf, numberOfValues = 1) {
-            for (let i = 0; i <= numberOfValues; ++i) {
-              const last = leaf.value[leaf.value.length - 1];
-              const prev = leaf.value[leaf.value.length - 2];
-              leaf.next([...leaf.value, last + prev]);
-            }
-          }
-        }
-      });
-
-      fibo.subscribe(value => console.log('fibonacci series is now ', value));
-      fibo.do.nextValue();
-      fibo.do.nextValue(5);
-      fibo.do.nextValue(2);
-      /**
-       *
-         fibonacci series is now  [ 1, 2 ]
-         fibonacci series is now  [ 1, 2, 3, 5 ]
-         fibonacci series is now  [
-         1,  2,  3,  5,  8,
-         13, 21, 34, 55, 89
-         ]
-         fibonacci series is now  [
-         1,  2,  3,  5,   8,  13,
-         21, 34, 55, 89, 144, 233,
-         377
-        ]
-       */
-
-```
-
-Being able to access the current state of the leaf in all contexts makes complex operations a lot easier.
-
 ## Keeping the same form
 
-By default, Leaf borks if you change the "form" of a leaf's value. This is because leaf's are intendeded to be nestable,
-and a parent leaf should expect any of its branch leafs to be consistent.
+By default -- you _can_ change the value to any type of content you want.
+If you pass `{type: true}` to the constructor,
+Forest will **block** any attempts to change the form of the value to a different type.
 
 ```javascript
 
-  const point = new Leaf({ x: 1, y: 2 });
+  const point = new Forest({$value: { x: 1, y: 2 }, type: true });
   point.subscribe(value => console.log('value of point', value));
   point.next({ x: 3, y: 4 });
   try {
-    point.next('Bob');
+    point.value = 'Bob'
   } catch (err) {
     console.log('bad form error: ', err);
   }
@@ -122,13 +81,12 @@ and a parent leaf should expect any of its branch leafs to be consistent.
 
 ````
 
-You can disable form checking with the configuration property "any" - but use at your own risk; 'any' in combination
-with setters or branches can be unpredictable.
+otherwise, by default, you can mangle your state's type all you like:
 
 ```javascript
 
-const point = new Leaf({ x: 1, y: 2 }, { any: true });
-point.subscribe(value => console.log('value of  unguarded point', value));
+const point = new Forest({ x: 1, y: 2 });
+point.subscribe(value => console.log('value of unguarded point', value));
 point.next({ x: 3, y: 4 });
 try {
   point.next('Bob');
@@ -146,6 +104,10 @@ point.next({ x: 5, y: 6 });
 
 ```
 
+That being said there are side effects to changing the type/form of a Forest instance's value;
+see [`/actions`](/actions) for details on how it affects actions, and [`/children`]([/children) for how it affects
+child Leafs.
+
 ## `delKeys(name | names[])`
 
 If you want to actually delete an index, you can pass one or more keys to `delKey` and it will remove them from a compound
@@ -153,8 +115,8 @@ object.
 
 ```javascript
 
-const objectLeaf = new Leaf({x: 0, y: 0});
-const mapLeaf = new Leaf(new Map([
+const objectLeaf = new Forest({x: 0, y: 0});
+const mapLeaf = new Forest(new Map([
   ['x', 0],
   ['y', 0]
 ]));
@@ -177,4 +139,3 @@ console.log('new map leaf value without y', mapLeaf.value);
 
 ```
 
-(1) -- branch Leaf instances only generate setters if properly configured -- see [branches](/features/brances) for more details.

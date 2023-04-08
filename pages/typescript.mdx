@@ -1,13 +1,11 @@
 # Forest and Typescript
 
-Because Forest is a database of dynamic values, it is not *directly* typeable; there are too many internal variations to
-conveniently type-lock the core Forest class itself. Similarly, actions are user-defined, so you cannot define the type
-of arguments in the definition of a forest's action, as exposed on the 'do' property.
-
-However, you can put type "around" the value; as in:
+Because Forest is a database of dynamic values, it is not completely compatible with Typescript; there is no
+way to easily introspect the parameters of custom actions, for instance. However, the value of a Forest instance
+can be injected with the typedLeaf generic:
 
 ````typescript
-import type { leafI } from "@wonderlandlabs/forest/lib/types";
+import type { leafI, typedLeaf } from "@wonderlandlabs/forest/lib/types";
 import {Forest} from "@wonderlandlabs/forest";
 import {useState, useEffect} from 'react';
 
@@ -15,10 +13,6 @@ type PointValue = {
   x: number,
   y: number,
   label: string
-}
-
-interface PointValueInterface extends leafI {
-  value: PointValue,
 }
 
 const initial: PointValue = {
@@ -30,18 +24,15 @@ const initial: PointValue = {
 const pointValue = new Forest({
   $value: initial,
   actions: {
-    moveX(leaf: leafI, offset: number) {
+    moveX(leaf: typedLeaf<PointValue>, offset: number) {
       leaf.do.set_x(leaf.value.x + offset);
     }
-
   }
-}) as PointValueInterface
+})
 
 const [value, setValue] = useState<PointValue>(pointValue.value);
 useEffect(() => {
   const sub = pointValue.subscribe(setValue);
-  pointValue.do.loadData();
-  pointValue.do.loadCountries();
 
   return () => sub.unsubscribe();
 }, [pointValue]);

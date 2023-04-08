@@ -8,7 +8,7 @@ Leaf itself is extensively covered with unit tests; here is one to give a sample
 
 
 function makePoint(x, y, z) {
-  return new Leaf(
+  return new Forest(
     {},
     {
       branches: p(x, y, z),
@@ -17,7 +17,7 @@ function makePoint(x, y, z) {
 }
 
 it('should have consistent branch values', () => {
-  const box = new Leaf(
+  const box = new Forest(
     {},
     {
       branches: {

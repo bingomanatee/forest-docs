@@ -29,9 +29,9 @@ constants `[TYPE_DATE, TYPE_NUMBER]` to accept any of several types/forms.
 
 ```javascript
 
-      const num = new Leaf(100, { type: true });
-      const numUntyped = new Leaf(100);
-      const numAny = new Leaf(100, { any: true });
+      const num = new Forest(100, { type: true });
+      const numUntyped = new Forest(100);
+      const numAny = new Forest(100, { any: true });
 
       num.subscribe(value => console.log('num value: ', value));
       numUntyped.subscribe(value => console.log('numUntyped value: ', value));
@@ -122,7 +122,7 @@ Do not attempt to change the value or the target leaf in any way inside a test.
 
 ```javascript
 
-const numLeaf = new Leaf(0, {
+const numLeaf = new Forest(0, {
   test({ next }) {
     if (next < 0) throw new Error('cannot be negative');
     if (next % 2) return 'must be even';
