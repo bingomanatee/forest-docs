@@ -375,7 +375,24 @@ The setter actions will directly set children -- if they exist to be set.
 If you want to store references to things like dom objects, you must attach them to a leaf as metadata.
 
 Metadata is stored internally as a "map collection". Metadata can be set but never overwritten or modified.
-you can access metadata through `forestInstance.getMeta(key)` or the `.getMeta(key)` method of any leaf.
+you can access metadata through the `.getMeta(key)` method of any leaf.
+
+Metadata can either be stored with the leaf initially with the `.meta {key: value...}` property of the
+configuration, or set at run-time with `.setMeta(key, value)`. Metadata does NOT affect or cause an update
+to state value. It is equivalent to the "reference" system of React.
+
+Metadata is not expected to change, once set; if you want to rewrite a meta value you must call `.setMeta(key, value, true)`
+to indicate you are intentionally overwriting a meta field.
+
+Some examples of useful things to put in meta:
+
+* Dom references
+* Buffers
+* Instances from other frameworks (Supabase, SVG.js, etc.)
+* Canvas items
+
+Essentially anything that relies on references, prototypes, etc., and that you use in actions but do not directly
+include with state.
 
 ## Immer integration
 
